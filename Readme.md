@@ -1,9 +1,13 @@
+# Additions
+
+Test Image by <a href="https://pixabay.com/users/Printeboek-6033538/?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=image&amp;utm_content=2571788">Ina Hoekstra</a> from <a href="https://pixabay.com/?utm_source=link-attribution&amp;utm_medium=referral&amp;utm_campaign=image&amp;utm_content=2571788">Pixabay</a>
+
 # Retina blood vessel segmentation with a convolution neural network (U-net)
 
 ![](test/test_Original_GroundTruth_Prediction3.png)
 
-This repository contains the implementation of a convolutional neural network used to segment blood vessels in retina fundus images. This is a binary classification task: the neural network predicts if each pixel in the fundus image is either a vessel or not.  
-The neural network structure is derived from the *U-Net* architecture, described in this [paper](https://arxiv.org/pdf/1505.04597.pdf).  
+This repository contains the implementation of a convolutional neural network used to segment blood vessels in retina fundus images. This is a binary classification task: the neural network predicts if each pixel in the fundus image is either a vessel or not.
+The neural network structure is derived from the *U-Net* architecture, described in this [paper](https://arxiv.org/pdf/1505.04597.pdf).
 The performance of this neural network is tested on the DRIVE database, and it achieves the best score in terms of area under the ROC curve in comparison to the other methods published so far. Also on the STARE datasets, this method reports one of the best performances.
 
 
@@ -14,16 +18,16 @@ Before training, the 20 images of the DRIVE training datasets are pre-processed 
 - Contrast-limited adaptive histogram equalization (CLAHE)
 - Gamma adjustment
 
-The training of the neural network is performed on sub-images (patches) of the pre-processed full images. Each patch, of dimension 48x48, is obtained by randomly selecting its center inside the full image. Also the patches partially or completely outside the Field Of View (FOV) are selected, in this way the neural network learns how to discriminate the FOV border from blood vessels.  
+The training of the neural network is performed on sub-images (patches) of the pre-processed full images. Each patch, of dimension 48x48, is obtained by randomly selecting its center inside the full image. Also the patches partially or completely outside the Field Of View (FOV) are selected, in this way the neural network learns how to discriminate the FOV border from blood vessels.
 A set of 190000 patches is obtained by randomly extracting 9500 patches in each of the 20 DRIVE training images. Although the patches overlap, i.e. different patches may contain same part of the original images, no further data augmentation is performed. The first 90% of the dataset is used for training (171000 patches), while the last 10% is used for validation (19000 patches).
 
 The neural network architecture is derived from the *U-net* architecture (see the [paper](https://arxiv.org/pdf/1505.04597.pdf)).
-The loss function is the cross-entropy and the stochastic gradient descent is employed for optimization. The activation function after each convolutional layer is the Rectifier Linear Unit (ReLU), and a dropout of 0.2 is used between two consecutive convolutional layers.  
+The loss function is the cross-entropy and the stochastic gradient descent is employed for optimization. The activation function after each convolutional layer is the Rectifier Linear Unit (ReLU), and a dropout of 0.2 is used between two consecutive convolutional layers.
 Training is performed for 150 epochs, with a mini-batch size of 32 patches. Using a GeForce GTX TITAN GPU the training lasts for about 20 hours.
 
 
 ## Results on DRIVE database
-Testing is performed with the 20 images of the DRIVE testing dataset, using the gold standard as ground truth. Only the pixels belonging to the FOV are considered. The FOV is identified with the masks included in the DRIVE database.  
+Testing is performed with the 20 images of the DRIVE testing dataset, using the gold standard as ground truth. Only the pixels belonging to the FOV are considered. The FOV is identified with the masks included in the DRIVE database.
 In order to improve the performance, the vessel probability of each pixel is obtained by averaging multiple predictions. With a stride of 5 pixels in both height and width, multiple consecutive overlapping patches are extracted in each testing image. Then, for each pixel, the vessel probability is obtained by averaging probabilities over all the predicted patches covering the pixel.
 
 The results reported in the `./test` folder are referred to the trained model which reported the minimum validation loss. The `./test` folder includes:
@@ -45,16 +49,16 @@ The results reported in the `./test` folder are referred to the trained model wh
 The following table compares this method to other recent techniques, which have published their performance in terms of Area Under the ROC curve (AUC ROC) on the DRIVE dataset.
 
 | Method                  | AUC ROC on DRIVE |
-| ----------------------- |:----------------:|
-| Soares et al [1]        | .9614            |
-| Azzopardi et al. [2]    | .9614            |
-| Osareh et al  [3]       | .9650            |
-| Roychowdhury et al. [4] | .9670            |
-| Fraz et al.  [5]        | .9747            |
-| Qiaoliang et al. [6]    | .9738            |
-| Melinscak et al. [7]    | .9749            |
-| Liskowski et al.^ [8]   | .9790            |
-| **this method**         | **.9790**        |
+| ----------------------- | :--------------: |
+| Soares et al [1]        |      .9614       |
+| Azzopardi et al. [2]    |      .9614       |
+| Osareh et al  [3]       |      .9650       |
+| Roychowdhury et al. [4] |      .9670       |
+| Fraz et al.  [5]        |      .9747       |
+| Qiaoliang et al. [6]    |      .9738       |
+| Melinscak et al. [7]    |      .9749       |
+| Liskowski et al.^ [8]   |      .9790       |
+| **this method**         |    **.9790**     |
 
 ^ different definition of FOV
 
@@ -102,18 +106,18 @@ In the root folder, just run:
 ```
 python prepare_datasets_DRIVE.py
 ```
-The HDF5 datasets for training and testing will be created in the folder `./DRIVE_datasets_training_testing/`.  
+The HDF5 datasets for training and testing will be created in the folder `./DRIVE_datasets_training_testing/`.
 N.B: If you gave a different name for the DRIVE folder, you need to specify it in the `prepare_datasets_DRIVE.py` file.
 
-Now we can configure the experiment. All the settings can be specified in the file `configuration.txt`, organized in the following sections:  
-**[data paths]**  
-Change these paths only if you have modified the `prepare_datasets_DRIVE.py` file.  
-**[experiment name]**  
-Choose a name for the experiment, a folder with the same name will be created and will contain all the results and the trained neural networks.  
-**[data attributes]**  
-The network is trained on sub-images (patches) of the original full images, specify here the dimension of the patches.  
-**[training settings]**  
-Here you can specify:  
+Now we can configure the experiment. All the settings can be specified in the file `configuration.txt`, organized in the following sections:
+**[data paths]**
+Change these paths only if you have modified the `prepare_datasets_DRIVE.py` file.
+**[experiment name]**
+Choose a name for the experiment, a folder with the same name will be created and will contain all the results and the trained neural networks.
+**[data attributes]**
+The network is trained on sub-images (patches) of the original full images, specify here the dimension of the patches.
+**[training settings]**
+Here you can specify:
 - *N_subimgs*: total number of patches randomly extracted from the original full images. This number must be a multiple of 20, since an equal number of patches is extracted in each of the 20 original training images.
 - *inside_FOV*: choose if the patches must be selected only completely inside the FOV. The neural network correctly learns how to exclude the FOV border if also the patches including the mask are selected. However, a higher number of patches are required for training.
 - *N_epochs*: number of training epochs.
@@ -125,7 +129,7 @@ After all the parameters have been configured, you can train the neural network 
 ```
 python run_training.py
 ```
-If available, a GPU will be used.  
+If available, a GPU will be used.
 The following files will be saved in the folder with the same name of the experiment:
 - model architecture (json)
 - picture of the model structure (png)
@@ -138,8 +142,8 @@ The following files will be saved in the folder with the same name of the experi
 ### Evaluate the trained model
 The performance of the trained model is evaluated against the DRIVE testing dataset, consisting of 20 images (as many as in the training set).
 
-The parameters for the testing can be tuned again in the `configuration.txt` file, specifically in the [testing settings] section, as described below:  
-**[testing settings]**  
+The parameters for the testing can be tuned again in the `configuration.txt` file, specifically in the [testing settings] section, as described below:
+**[testing settings]**
 - *best_last*: choose the model for prediction on the testing dataset: best = the model with the lowest validation loss obtained during the training; last = the model at the last epoch.
 - *full_images_to_test*: number of full images for testing, max 20.
 - *N_group_visual*: choose how many images per row in the saved figures.
@@ -154,7 +158,7 @@ Run testing by:
 ```
 python run_testing.py
 ```
-If available, a GPU will be used.  
+If available, a GPU will be used.
 The following files will be saved in the folder with same name of the experiment:
 - The ROC curve  (png)
 - The Precision-recall curve (png)
@@ -169,35 +173,35 @@ All the results are referred only to the pixels belonging to the FOV, selected b
 
 ## Results on STARE database
 
-This neural network has been tested also on another common database, the [STARE](http://cecas.clemson.edu/~ahoover/stare/). The neural network is identical as in the experiment with the DRIVE dataset, however some modifications in the code and in the methodology were necessary due to the differences between the two datasets.  
-The STARE consists of 20 retinal fundus images with two sets of manual segmentation provided by two different observers, with the former one considered as the ground truth. Conversely to the DRIVE dataset, there is no standard division into train and test images, therefore the experiment has been performed with the *leave-one-out* method. The training-testing cycle has been repeated 20 times: at each iteration one image has been left out from the training set and then used for the test.  
-The pre-processing is the same applied for the DRIVE dataset, and 9500 random patches of 48x48 pixels each are extracted from each of the 19 images forming the training set. Also the area outside the FOV has been considered for the patch extraction. From these patches, 90% (162450 patches) are used for training and 10% (18050 patches) are used for validation.  The training parameters (epochs, batch size...) are the same as in the DRIVE experiment.  
-The test is performed each time on the single image left out from the training dataset. Similarly to the DRIVE dataset, the vessel probability of each pixel is obtained by averaging over multiple overlapping patches, obtained with a stride of 5 pixels in both width and height. Only the pixels belonging to the FOV are considered. This time the FOV is identified by applying a color threshold in the original images, since no masks are available in the STARE dataset.  
+This neural network has been tested also on another common database, the [STARE](http://cecas.clemson.edu/~ahoover/stare/). The neural network is identical as in the experiment with the DRIVE dataset, however some modifications in the code and in the methodology were necessary due to the differences between the two datasets.
+The STARE consists of 20 retinal fundus images with two sets of manual segmentation provided by two different observers, with the former one considered as the ground truth. Conversely to the DRIVE dataset, there is no standard division into train and test images, therefore the experiment has been performed with the *leave-one-out* method. The training-testing cycle has been repeated 20 times: at each iteration one image has been left out from the training set and then used for the test.
+The pre-processing is the same applied for the DRIVE dataset, and 9500 random patches of 48x48 pixels each are extracted from each of the 19 images forming the training set. Also the area outside the FOV has been considered for the patch extraction. From these patches, 90% (162450 patches) are used for training and 10% (18050 patches) are used for validation.  The training parameters (epochs, batch size...) are the same as in the DRIVE experiment.
+The test is performed each time on the single image left out from the training dataset. Similarly to the DRIVE dataset, the vessel probability of each pixel is obtained by averaging over multiple overlapping patches, obtained with a stride of 5 pixels in both width and height. Only the pixels belonging to the FOV are considered. This time the FOV is identified by applying a color threshold in the original images, since no masks are available in the STARE dataset.
 
 The following table shows the results (in terms of AUC ROC) obtained over the 20 different trainings, with the stated image used for test.
 
-| STARE image| AUC ROC|
-| ---------- |:------:|
-| im0239.ppm | .9751 |
-| im0324.ppm | .9661 |
-| im0139.ppm | .9845 |
-| im0082.ppm | .9929 |
-| im0240.ppm | .9832 |
-| im0003.ppm | .9856 |
-| im0319.ppm | .9702 |
-| im0163.ppm | .9952 |
-| im0077.ppm | .9925 |
-| im0162.ppm | .9913 |
-| im0081.ppm | .9930 |
-| im0291.ppm | .9635 |
-| im0005.ppm | .9703 |
-| im0235.ppm | .9912 |
-| im0004.ppm | .9732 |
-| im0044.ppm | .9883 |
-| im0001.ppm | .9709 |
-| im0002.ppm | .9588 |
-| im0236.ppm | .9893 |
-| im0255.ppm | .9819 |
+| STARE image | AUC ROC |
+| ----------- | :-----: |
+| im0239.ppm  |  .9751  |
+| im0324.ppm  |  .9661  |
+| im0139.ppm  |  .9845  |
+| im0082.ppm  |  .9929  |
+| im0240.ppm  |  .9832  |
+| im0003.ppm  |  .9856  |
+| im0319.ppm  |  .9702  |
+| im0163.ppm  |  .9952  |
+| im0077.ppm  |  .9925  |
+| im0162.ppm  |  .9913  |
+| im0081.ppm  |  .9930  |
+| im0291.ppm  |  .9635  |
+| im0005.ppm  |  .9703  |
+| im0235.ppm  |  .9912  |
+| im0004.ppm  |  .9732  |
+| im0044.ppm  |  .9883  |
+| im0001.ppm  |  .9709  |
+| im0002.ppm  |  .9588  |
+| im0236.ppm  |  .9893  |
+| im0255.ppm  |  .9819  |
 
 __AVERAGE:   .9805 +- .0113__
 
@@ -206,14 +210,14 @@ The folder `./STARE_results` contains all the predictions. Each image shows (fro
 The following table compares this method to other recent techniques, which have published their performance in terms of Area Under the ROC curve (AUC ROC) on the STARE dataset.
 
 | Method                  | AUC ROC on STARE |
-| ----------------------- |:----------------:|
-| Soares et al [1]        | .9671           |
-| Azzopardi et al. [2]    | .9563            |
-| Roychowdhury et al. [4] | .9688            |
-| Fraz et al.  [5]        | .9768            |
-| Qiaoliang et al. [6]    | .9879            |
-| Liskowski et al.^ [8]   | .9930            |
-| **this method**         | **.9805**        |
+| ----------------------- | :--------------: |
+| Soares et al [1]        |      .9671       |
+| Azzopardi et al. [2]    |      .9563       |
+| Roychowdhury et al. [4] |      .9688       |
+| Fraz et al.  [5]        |      .9768       |
+| Qiaoliang et al. [6]    |      .9879       |
+| Liskowski et al.^ [8]   |      .9930       |
+| **this method**         |    **.9805**     |
 
 ^ different definition of FOV
 
