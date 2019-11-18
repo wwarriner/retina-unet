@@ -103,7 +103,9 @@ def build_unet(input_shape, levels):
     outputs = activate(up_convs[-1], input_shape[:-1])
     model = Model(inputs=inputs, outputs=outputs)
     model.compile(
-        optimizer="sgd", loss="categorical_crossentropy", metrics=MeanIoU(num_classes=1)
+        optimizer="sgd",
+        loss="categorical_crossentropy",
+        metrics=[MeanIoU(num_classes=1)],
     )
     return model
 
