@@ -2,10 +2,12 @@ name: unet
 channels:
   - defaults
 dependencies:
-  - tensorflow=2.0.0
+  - python=3.7.5
+  - tensorflow-gpu=2.0.0
   - h5py
   - pillow
   - numpy
   - ipykernel
+  - pip
   - pip:
       - opencv-python
