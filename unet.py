@@ -10,9 +10,9 @@ from tensorflow.python.keras.layers import (
     UpSampling2D,
 )
 from tensorflow.python.keras.models import Model
-from tensorflow.python.keras.metrics import MeanIoU
-from tensorflow.python.keras.losses import CategoricalCrossentropy
 from tensorflow.keras.optimizers import SGD
+from tensorflow.python.keras.losses import CategoricalCrossentropy
+from tensorflow.python.keras.metrics import MeanIoU, Accuracy
 from tensorflow.python.keras import backend as K
 
 
@@ -24,26 +24,23 @@ def build_convolution(previous, depth):
     SHAPE = (3, 3)
     ACT = "relu"
     PAD = "same"
-    DF = "channels_first"
     DROP = 0.2
-    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD, data_format=DF)(previous)
+    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(previous)
     conv = Dropout(DROP)(conv)
-    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD, data_format=DF)(conv)
+    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(conv)
     return conv
 
 
 def contract(previous):
     SHAPE = (2, 2)
-    DF = "channels_first"
-    pool = MaxPooling2D(SHAPE, data_format=DF)(previous)
+    pool = MaxPooling2D(SHAPE)(previous)
     return pool
 
 
 def expand(previous, transfer_conv):
     SHAPE = (2, 2)
-    DF = "channels_first"
-    up = UpSampling2D(size=SHAPE, data_format=DF)(previous)
-    up = concatenate([transfer_conv, up], axis=1)
+    up = UpSampling2D(size=SHAPE)(previous)
+    up = concatenate([transfer_conv, up])
     return up
 
 
@@ -52,11 +49,10 @@ def activate(previous, pixels):
     SHAPE = (1, 1)
     ACT = "relu"
     PAD = "same"
-    DF = "channels_first"
-    ACT = "softmax"
-    act = Conv2D(DEPTH, SHAPE, activation=ACT, padding=PAD, data_format=DF)(previous)
+    ACT = "sigmoid"
+    act = Conv2D(DEPTH, SHAPE, activation=ACT, padding=PAD)(previous)
     # act = Reshape((DEPTH, pixels))(act)
-    act = Permute((2, 3, 1))(act)
+    # act = Permute((2, 3, 1))(act)
     act = Activation(ACT)(act)
     return act
 
@@ -104,8 +100,13 @@ def build_unet(input_shape, levels):
     outputs = activate(up_convs[-1], input_shape[:-1])
     model = Model(inputs=inputs, outputs=outputs)
     model.compile(
-        optimizer=SGD(lr=0.1),
+        optimizer=SGD(lr=0.01),
         loss=CategoricalCrossentropy(from_logits=False),
-        metrics=[MeanIoU(num_classes=2)],
+        metrics=[MeanIoU(num_classes=2), Accuracy()],
     )
     return model
+
+
+# model = build_unet((48, 48, 1), 2)
+# print(model.summary())
+# pass

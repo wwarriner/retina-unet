@@ -68,7 +68,7 @@ def train():
     training_folder = PurePath(".") / paths["data"] / paths["training"]
 
     training = stack(load_folder(str(training_folder / paths["images"]), ext=".tif"))
-    training = preprocess(training)
+    training = preprocess(training) / 255
     masks = stack(load_folder(str(training_folder / paths["masks"]), ext=".gif"))
     groundtruth = (
         stack(load_folder(str(training_folder / paths["groundtruth"]), ext=".gif"))
@@ -80,8 +80,8 @@ def train():
     patches, groundtruth = extract_random(
         training, patch_shape, patch_count, masks, groundtruth
     )
-    patches = patches.transpose(0, 3, 1, 2)
-    groundtruth = groundtruth.transpose(0, 3, 1, 2)
+    # patches = patches.transpose(0, 3, 1, 2)
+    # groundtruth = groundtruth.transpose(0, 3, 1, 2)
 
     unet_levels = config["training"]["unet_levels"]
     model = build_unet(patches.shape[1:], unet_levels)
@@ -106,7 +106,7 @@ def train():
     split = config["training"]["validation_split"]
     model.fit(
         patches,
-        one_hot(groundtruth, depth=2),
+        one_hot(groundtruth.squeeze(), depth=2),
         epochs=epochs,
         batch_size=batch_size,
         shuffle=True,
