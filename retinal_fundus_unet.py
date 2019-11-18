@@ -116,7 +116,3 @@ def train():
 def test():
     # TODO
     pass
-
-
-train()
-pass
