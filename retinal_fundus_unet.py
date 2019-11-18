@@ -57,6 +57,7 @@ def save_architecture(json_str, json_file):
 
 
 def train():
+    # TODO make work with GPU
     config = load_config()
     paths = config["paths"]
     training_folder = PurePath(".") / paths["data"] / paths["training"]
@@ -112,16 +113,10 @@ def train():
     model.save_weights(str(last_file), overwrite=True)
 
 
-# shape = (4, 200, 240, 3)
-# a = np.arange(np.array(shape).prod()).reshape(shape)
-# a = load_folder(r"C:\Users\wwarr\Desktop\training\images", ext=".tif")
-# a = stack(a)
-# a = a / a.max() * 255
-# a = a.astype(np.uint8)
-# a = preprocess(a)
-# visualize(a[0, ...], "proc")
-# cv2.waitKey(1200)
-# patches = extract_random(np.concatenate((a, a), axis=0), (50, 50), 100)
-# visualize(montage(patches, (10, 10)))
+def test():
+    # TODO
+    pass
+
+
 train()
 pass
