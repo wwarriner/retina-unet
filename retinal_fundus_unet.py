@@ -4,8 +4,14 @@ from pathlib import PurePath
 
 import numpy as np
 import cv2
+import tensorflow as tf
+from tensorflow import config
+
+devices = config.experimental.list_physical_devices("GPU")
+assert len(devices) > 0
+config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
-from tensorflow import one_hot
+from tensorflow.python import one_hot
 
 import image_preprocess as ip
 from image_util import *
@@ -57,7 +63,6 @@ def save_architecture(json_str, json_file):
 
 
 def train():
-    # TODO make work with GPU
     config = load_config()
     paths = config["paths"]
     training_folder = PurePath(".") / paths["data"] / paths["training"]
@@ -65,9 +70,10 @@ def train():
     training = stack(load_folder(str(training_folder / paths["images"]), ext=".tif"))
     training = preprocess(training)
     masks = stack(load_folder(str(training_folder / paths["masks"]), ext=".gif"))
-    groundtruth = stack(
-        load_folder(str(training_folder / paths["groundtruth"]), ext=".gif")
-    )
+    groundtruth = (
+        stack(load_folder(str(training_folder / paths["groundtruth"]), ext=".gif"))
+        / 255
+    ).astype(np.uint8)
 
     patch_shape = config["training"]["patch_shape"]
     patch_count = config["training"]["patch_count"]
