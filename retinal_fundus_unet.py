@@ -103,7 +103,6 @@ def train():
         one_hot(groundtruth, depth=2),
         epochs=epochs,
         batch_size=batch_size,
-        verbose=2,
         shuffle=True,
         validation_split=split,
         callbacks=[checkpoint],
