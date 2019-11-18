@@ -12,6 +12,7 @@ from tensorflow.python.keras.layers import (
 from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.optimizers import SGD
 from tensorflow.python.keras import backend as K
+from tensorflow.python.keras.metrics import MeanIoU
 
 
 def compute_depth(base, level):
@@ -102,7 +103,7 @@ def build_unet(input_shape, levels):
     outputs = activate(up_convs[-1], input_shape[:-1])
     model = Model(inputs=inputs, outputs=outputs)
     model.compile(
-        optimizer="sgd", loss="categorical_crossentropy", metrics=["accuracy"]
+        optimizer="sgd", loss="categorical_crossentropy", metrics=MeanIoU(num_classes=1)
     )
     return model
 
