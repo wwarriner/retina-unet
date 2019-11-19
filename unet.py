@@ -15,6 +15,8 @@ from tensorflow.python.keras.losses import CategoricalCrossentropy
 from tensorflow.python.keras.metrics import MeanIoU, Accuracy
 from tensorflow.python.keras import backend as K
 
+# TODO add tests
+
 
 def compute_depth(base, level):
     return base * (2 ** level)
@@ -26,9 +28,8 @@ def build_convolution(previous, depth):
     PAD = "same"
     DROP = 0.2
     conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(previous)
-    conv = Dropout(DROP)(conv)
-    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(conv)
-    return conv
+    drop = Dropout(DROP)(conv)
+    return Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(drop)
 
 
 def contract(previous):
@@ -40,21 +41,17 @@ def contract(previous):
 def expand(previous, transfer_conv):
     SHAPE = (2, 2)
     up = UpSampling2D(size=SHAPE)(previous)
-    up = concatenate([transfer_conv, up])
-    return up
+    return concatenate([transfer_conv, up])
 
 
-def activate(previous, pixels):
+def activate(previous):
     DEPTH = 2
     SHAPE = (1, 1)
     ACT = "relu"
     PAD = "same"
-    ACT = "sigmoid"
+    ACT = "softmax"
     act = Conv2D(DEPTH, SHAPE, activation=ACT, padding=PAD)(previous)
-    # act = Reshape((DEPTH, pixels))(act)
-    # act = Permute((2, 3, 1))(act)
-    act = Activation(ACT)(act)
-    return act
+    return Activation(ACT)(act)
 
 
 def downscale(start, depth, levels):
@@ -93,20 +90,16 @@ def upscale(bottom, down_convs, depth):
 
 def build_unet(input_shape, levels):
     DEPTH = 32
-    inputs = Input(shape=input_shape)
-    down_convs, pools = downscale(inputs, DEPTH, levels)
+    inputs = Input(input_shape)
+    convs, pools = downscale(inputs, DEPTH, levels)
     bottom = bottom_out(pools[-1], DEPTH, levels)
-    up_convs, _ = upscale(bottom, down_convs, DEPTH)
-    outputs = activate(up_convs[-1], input_shape[:-1])
-    model = Model(inputs=inputs, outputs=outputs)
+    convs, _ = upscale(bottom, convs, DEPTH)
+    act = activate(convs[-1])
+    model = Model(inputs=inputs, outputs=act)
+    # TODO figure out why metrics aren't working
     model.compile(
         optimizer=SGD(lr=0.01),
         loss=CategoricalCrossentropy(from_logits=False),
         metrics=[MeanIoU(num_classes=2), Accuracy()],
     )
     return model
-
-
-# model = build_unet((48, 48, 1), 2)
-# print(model.summary())
-# pass
