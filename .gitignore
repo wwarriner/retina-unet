@@ -152,3 +152,4 @@ $RECYCLE.BIN/
 /out/
 /data/
 /*/settings.json
+.vscode/launch.json
