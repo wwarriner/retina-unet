@@ -8,6 +8,9 @@ from PIL import Image
 
 from files import create_ext_glob
 
+# TODO make this, image_preprocess.py, and patch_extract.py into a more generic
+# TODO "image_stack" class
+
 
 def get_center(shape):
     """Returns the center point of an image shape, rounded down."""
@@ -65,20 +68,58 @@ def load(path):
     return image
 
 
-def patchify(image, patch_size, *args, **kwargs):
+def patchify(images, patch_shape, *args, **kwargs):
     """image has HWC
-    patch_size has HW"""
-    padding = patch_size - np.remainder(image.shape[:-1], patch_size)
-    padding = np.append(padding, 0)
-    padding = list(zip((0, 0, 0), padding))
-    padded = np.pad(image, padding, *args, **kwargs)
-    return np.stack(
+    patch_shape has HW"""
+    assert images.ndim in (3, 4)
+    if images.ndim == 3:
+        images = images[np.newaxis, ...]
+    out_padding = patch_shape - np.remainder(images.shape[1:-1], patch_shape)
+    padding = np.append(out_padding, 0)
+    padding = np.insert(padding, 0, 0)
+    padding = list(zip((0, 0, 0, 0), padding))
+    padded = np.pad(images, padding, *args, **kwargs)
+    # stack up patches
+    patches = np.concatenate(
         [
-            padded[x : x + patch_size[0], y : y + patch_size[1], ...]
-            for x in range(0, padded.shape[0], patch_size[0])
-            for y in range(0, padded.shape[1], patch_size[1])
+            # images to patches - HWC to NHWC
+            np.stack(
+                [
+                    padded[image, x : x + patch_shape[0], y : y + patch_shape[1], ...]
+                    for x in range(0, padded.shape[1], patch_shape[0])
+                    for y in range(0, padded.shape[2], patch_shape[1])
+                ]
+            )
+            for image in range(padded.shape[0])
         ]
     )
+    patch_counts = [x // y for x, y in zip(padded.shape[1:3], patch_shape)]
+    return patches, patch_counts, list(out_padding)
+
+
+def unpatchify(patches, patch_counts, padding):
+    """patches has NHWC
+    patch_counts has HW"""
+    chunk_len = np.array(patch_counts).prod()
+    # stack - N
+    images = np.stack(
+        [
+            # rows - H
+            np.concatenate(
+                [
+                    # cols - W
+                    np.concatenate(
+                        patches[y + chunk : y + patch_counts[0] + chunk], axis=0
+                    )
+                    for y in range(0, chunk_len, patch_counts[0])
+                ],
+                axis=1,
+            )
+            for chunk in range(0, patches.shape[0], chunk_len)
+        ]
+    )
+    images = images[:, : -padding[0], : -padding[1], ...]
+    return images
 
 
 def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
@@ -93,7 +134,7 @@ def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
     else:
         cv2.imshow(tag, image)
     # HACK Next three lines force the window to the top.
-    cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-    cv2.waitKey(1)
-    cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+    # cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    # cv2.waitKey(1)
+    # cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
     cv2.waitKey(1)
