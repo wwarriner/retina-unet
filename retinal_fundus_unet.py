@@ -125,5 +125,33 @@ def train():
 
 
 def test():
-    # TODO
+    config = load_config()
+    paths = config["paths"]
+    testing_folder = PurePath(".") / paths["data"] / paths["training"]
+
+    testing = stack(load_folder(str(testing_folder / paths["images"]), ext=".tif"))
+    testing = preprocess(testing) / 255
+    # masks = stack(load_folder(str(testing_folder / paths["masks"]), ext=".gif"))
+    groundtruth = (
+        stack(load_folder(str(testing_folder / paths["groundtruth"]), ext=".gif")) / 255
+    ).astype(np.uint8)
+
+    patch_shape = config["training"]["patch_shape"]
+    patches, patch_counts, padding = patchify(testing, patch_shape)
+
+    name = config["general"]["name"]
+    out_folder = PurePath(".") / "out" / name
+    model_file = out_folder / (name + "_best_weights.h5")
+    model = load_model(model_file)
+
+    predictions = model.predict(patches)
+    predictions = np.argmax(predictions, axis=-1)
+    predictions = predictions[..., np.newaxis]
+    predictions = unpatchify(predictions, patch_counts, padding)
+    # TODO mask out predictions
+    # TODO write predicted images to files
     pass
+
+
+# train()
+test()
