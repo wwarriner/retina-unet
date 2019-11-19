@@ -42,9 +42,14 @@ def montage(images, shape):
     it = cycle(images)
     size = np.array(shape).prod()
     montage = np.array([next(it) for _ in range(size)])
-    montage = montage.reshape(*shape, *images.shape[1:])
-    montage = montage.transpose((0, 2, 1, 3))
-    return montage.reshape([s * i for s, i in zip(shape, images.shape[1:])])
+    hwc_shape = images.shape[1:]
+    montage = montage.reshape(*shape, *hwc_shape)
+    n = list(range(montage.ndim))
+    montage = montage.transpose((0, 2, 1, 3, 4))
+    hw_shape = hwc_shape[:-1]
+    final_shape = [s * i for s, i in zip(shape, hw_shape)]
+    final_shape.append(-1)
+    return montage.reshape(final_shape)
 
 
 def save(path, image):
@@ -60,6 +65,22 @@ def load(path):
     return image
 
 
+def patchify(image, patch_size, *args, **kwargs):
+    """image has HWC
+    patch_size has HW"""
+    padding = patch_size - np.remainder(image.shape[:-1], patch_size)
+    padding = np.append(padding, 0)
+    padding = list(zip((0, 0, 0), padding))
+    padded = np.pad(image, padding, *args, **kwargs)
+    return np.stack(
+        [
+            padded[x : x + patch_size[0], y : y + patch_size[1], ...]
+            for x in range(0, padded.shape[0], patch_size[0])
+            for y in range(0, padded.shape[1], patch_size[1])
+        ]
+    )
+
+
 def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
     assert image.ndim in (2, 3)
     if image.ndim == 3:
@@ -71,4 +92,8 @@ def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
         cv2.imshow(tag, np.flip(image, axis=2))
     else:
         cv2.imshow(tag, image)
+    # HACK Next three lines force the window to the top.
+    cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    cv2.waitKey(1)
+    cv2.setWindowProperty(tag, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
     cv2.waitKey(1)

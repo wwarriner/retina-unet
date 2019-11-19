@@ -1,6 +1,7 @@
 from itertools import repeat
 import json
 from pathlib import PurePath
+import random
 
 import numpy as np
 import cv2
@@ -12,6 +13,7 @@ assert len(devices) > 0
 config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python import one_hot
+from tensorflow.python.keras.models import load_model
 
 import image_preprocess as ip
 from image_util import *
@@ -44,6 +46,8 @@ def extract_random(images, patch_shape, patch_count, masks=None, auxiliary_image
     # to use comprehensions with zip() we need an always-None iterable.
     if masks is None:
         masks = repeat(None)
+    if auxiliary_images is None:
+        auxiliary_images = repeat(None)
     raw = [
         pe.generate_random_patch(image, patch_shape, mask, aux)
         for _ in range(patches_per_image)
@@ -63,6 +67,8 @@ def save_architecture(json_str, json_file):
 
 
 def train():
+    # tf.random.set_seed(352462476247)
+
     config = load_config()
     paths = config["paths"]
     training_folder = PurePath(".") / paths["data"] / paths["training"]
@@ -80,8 +86,8 @@ def train():
     patches, groundtruth = extract_random(
         training, patch_shape, patch_count, masks, groundtruth
     )
-    # patches = patches.transpose(0, 3, 1, 2)
-    # groundtruth = groundtruth.transpose(0, 3, 1, 2)
+    # visualize(montage(patches, (10, 10)), "patches")
+    # visualize(montage(255 * groundtruth, (10, 10)), "groundtruth")
 
     unet_levels = config["training"]["unet_levels"]
     model = build_unet(patches.shape[1:], unet_levels)
