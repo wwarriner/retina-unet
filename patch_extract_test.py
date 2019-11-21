@@ -1,5 +1,5 @@
 import unittest
-from math import floor, pi
+from math import floor
 
 import numpy as np
 
