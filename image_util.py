@@ -163,6 +163,13 @@ def unpatchify(patches, patch_counts, padding):
     return images
 
 
+def mask_images(images, masks):
+    masked = images.copy()
+    threshold = (masks.max() - masks.min()) / 2.0
+    masked[masks <= threshold] = 0
+    return masked
+
+
 def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
     assert image.ndim in (2, 3)
     if image.ndim == 3:
