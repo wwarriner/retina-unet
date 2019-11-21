@@ -34,6 +34,34 @@ def load_folder(path, ext):
     return [load(str(image_file)) for image_file in image_files]
 
 
+def save_images(path, name, images):
+    """name includes extension, i.e. 'out.png'.
+    Note that files are saved with an appropriately formatted number, i.e. if
+    name is 'out.png', 50 images will be saved as 'out_01.png' through
+    'out_50.png'. One image will be saved as 'out.png'.
+    images must be NHWC format, or a single HWC image."""
+    assert images.ndim in (3, 4)
+    if images.ndim == 3:
+        images = images[np.newaxis, ...]
+
+    ext = PurePath(name).suffix
+    base = PurePath(name).stem
+    count = images.shape[0]
+    if count <= 1:
+        digits = 0
+    else:
+        digits = ceil(log10(count - 1)) - 1
+
+    form = "{base:s}_{number:0{digits}d}{ext:s}"
+    if count == 1:
+        save(str(PurePath(path) / name), images[0])
+    else:
+        for i, image in enumerate(images):
+            full_name = form.format(base=base, number=i, digits=digits, ext=ext)
+            image_path = PurePath(path) / full_name
+            save(str(image_path), image)
+
+
 def stack(images):
     if type(images) is np.ndarray:
         images = (images,)
