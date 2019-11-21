@@ -88,7 +88,7 @@ def upscale(bottom, down_convs, depth):
     return convs, ups
 
 
-def build_unet(input_shape, levels):
+def build_unet(input_shape, levels, learning_rate):
     DEPTH = 32
     inputs = Input(input_shape)
     # convs, pools = downscale(inputs, DEPTH, levels)
@@ -128,7 +128,7 @@ def build_unet(input_shape, levels):
     model = Model(inputs=inputs, outputs=act)
     # TODO figure out why metrics aren't working
     model.compile(
-        optimizer=SGD(lr=0.01),
+        optimizer=SGD(lr=learning_rate),
         loss=CategoricalCrossentropy(from_logits=False),
         metrics=[MeanIoU(num_classes=2), Accuracy()],
     )

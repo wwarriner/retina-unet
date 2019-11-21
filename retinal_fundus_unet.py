@@ -136,7 +136,8 @@ def create_model_checkpoint(config):
 
 def create_model(config, x_train):
     unet_levels = config["training"]["unet_levels"]
-    return build_unet(x_train.shape[1:], unet_levels)
+    learning_rate = config["training"]["learning_rate"]
+    return build_unet(x_train.shape[1:], unet_levels, learning_rate)
 
 
 def fit_model(config, model, x_train, y_train, checkpoint):
