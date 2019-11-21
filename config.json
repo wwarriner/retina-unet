@@ -1,8 +1,8 @@
 {
   "paths": {
     "data": "data",
-    "training": "training",
-    "testing": "test",
+    "train": "training",
+    "test": "test",
     "images": "images",
     "masks": "mask",
     "groundtruth": "1st_manual"
