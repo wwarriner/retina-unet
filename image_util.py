@@ -96,33 +96,48 @@ def load(path):
     return image
 
 
+def interleave(a, b):
+    c = np.empty((a.size + b.size), dtype=a.dtype)
+    c[0::2] = a
+    c[1::2] = b
+    return c
+
+
+def deinterleave(c):
+    a = c[0::2]
+    b = c[1::2]
+    return a, b
+
+
 def patchify(images, patch_shape, *args, **kwargs):
-    """image has HWC
+    """images has NHWC
     patch_shape has HW"""
     assert images.ndim in (3, 4)
     if images.ndim == 3:
         images = images[np.newaxis, ...]
+
     out_padding = patch_shape - np.remainder(images.shape[1:-1], patch_shape)
     padding = np.append(out_padding, 0)
     padding = np.insert(padding, 0, 0)
     padding = list(zip((0, 0, 0, 0), padding))
     padded = np.pad(images, padding, *args, **kwargs)
-    # stack up patches
-    patches = np.concatenate(
-        [
-            # images to patches - HWC to NHWC
-            np.stack(
-                [
-                    padded[image, x : x + patch_shape[0], y : y + patch_shape[1], ...]
-                    for x in range(0, padded.shape[1], patch_shape[0])
-                    for y in range(0, padded.shape[2], patch_shape[1])
-                ]
-            )
-            for image in range(padded.shape[0])
-        ]
-    )
-    patch_counts = [x // y for x, y in zip(padded.shape[1:3], patch_shape)]
-    return patches, patch_counts, list(out_padding)
+
+    patch_shape = np.array(patch_shape)
+    patch_counts = np.array([x // y for x, y in zip(padded.shape[1:-1], patch_shape)])
+    patches_shape = interleave(patch_counts, patch_shape)
+    patches_shape = np.append(patches_shape, images.shape[-1])
+    patches_shape = np.insert(patches_shape, 0, -1)
+    patches = padded.reshape(patches_shape)
+
+    dim_order = deinterleave(range(1, patches.ndim - 1))
+    dim_order = np.append(dim_order, patches.ndim - 1)
+    dim_order = np.insert(dim_order, 0, 0)
+    patches = patches.transpose(dim_order)
+
+    stacked_shape = (-1, *patch_shape, images.shape[-1])
+    patches = patches.reshape(stacked_shape)
+
+    return patches, patch_counts, out_padding
 
 
 def unpatchify(patches, patch_counts, padding):
