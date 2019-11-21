@@ -14,6 +14,7 @@ config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python import one_hot
 from tensorflow.python.keras.models import load_model
+from tensorflow.python.keras.utils import to_categorical
 
 import image_preprocess as ip
 from image_util import *
@@ -61,45 +62,70 @@ def load_config():
         return json.load(f)
 
 
-def save_architecture(json_str, json_file):
-    with open(json_file, "w") as f:
+def save_architecture(json_str, config):
+    model_file = get_out_folder(config) / (get_name(config) + "_architecture.json")
+    with open(model_file, "w") as f:
         f.write(json_str)
 
 
-def train():
-    # tf.random.set_seed(352462476247)
+def get_name(config):
+    return config["general"]["name"]
 
-    config = load_config()
+
+def get_out_folder(config):
+    out_folder = PurePath(".") / "out" / get_name(config)
+    Path(out_folder).mkdir(parents=True, exist_ok=True)
+    return out_folder
+
+
+def get_train_test_subfolder(config, train_test, sub_tag):
     paths = config["paths"]
-    training_folder = PurePath(".") / paths["data"] / paths["training"]
+    return PurePath(".") / paths["data"] / paths[train_test] / paths[sub_tag]
 
-    training = stack(load_folder(str(training_folder / paths["images"]), ext=".tif"))
-    training = preprocess(training) / 255
-    masks = stack(load_folder(str(training_folder / paths["masks"]), ext=".gif"))
-    groundtruth = (
-        stack(load_folder(str(training_folder / paths["groundtruth"]), ext=".gif"))
-        / 255
-    ).astype(np.uint8)
 
+def load_mask(config, test_train):
+    paths = config["paths"]
+    mask_folder = get_train_test_subfolder(config, test_train, "masks")
+    mask = load_folder(str(mask_folder), ext=".gif")
+    mask = stack(mask)
+    return mask / 255
+
+
+def load_xy(config, test_train):
+    paths = config["paths"]
+    x_folder = get_train_test_subfolder(config, test_train, "images")
+    x = load_folder(str(x_folder), ext=".tif")
+    x = stack(x)
+    x = preprocess(x) / 255
+    assert (x != 0).any()
+
+    y_folder = get_train_test_subfolder(config, test_train, "groundtruth")
+    y = load_folder(str(y_folder), ext=".gif")
+    y = stack(y)
+    y = y / 255
+    y = y.astype(np.uint8)
+    assert (y == 1).any()
+    assert (y == 0).any()
+
+    return x, y
+
+
+def extract_random_patches(config, x_train, y_train, masks):
     patch_shape = config["training"]["patch_shape"]
     patch_count = config["training"]["patch_count"]
-    patches, groundtruth = extract_random(
-        training, patch_shape, patch_count, masks, groundtruth
-    )
-    # visualize(montage(patches, (10, 10)), "patches")
-    # visualize(montage(255 * groundtruth, (10, 10)), "groundtruth")
+    return extract_random(x_train, patch_shape, patch_count, masks, y_train)
 
-    unet_levels = config["training"]["unet_levels"]
-    model = build_unet(patches.shape[1:], unet_levels)
 
-    name = config["general"]["name"]
-    out_folder = PurePath(".") / "out" / name
-    Path(out_folder).mkdir(parents=True, exist_ok=True)
-    model_file = out_folder / (name + "_architecture.json")
-    save_architecture(model.to_json(), str(model_file))
+def extract_structured_patches(config, x_test):
+    patch_shape = config["training"]["patch_shape"]
+    return patchify(x_test, patch_shape)
 
+
+def create_model_checkpoint(config):
+    name = get_name(config)
+    out_folder = get_out_folder(config)
     checkpoint_file = out_folder / (name + "_best_weights.h5")
-    checkpoint = ModelCheckpoint(
+    return ModelCheckpoint(
         filepath=str(checkpoint_file),
         verbose=1,
         monitor="val_loss",
@@ -107,12 +133,19 @@ def train():
         save_best_only=True,
     )
 
+
+def create_model(config, x_train):
+    unet_levels = config["training"]["unet_levels"]
+    return build_unet(x_train.shape[1:], unet_levels)
+
+
+def fit_model(config, model, x_train, y_train, checkpoint):
     epochs = config["training"]["epochs"]
     batch_size = config["training"]["batch_size"]
     split = config["training"]["validation_split"]
     model.fit(
-        patches,
-        one_hot(groundtruth.squeeze(), depth=2),
+        x_train,
+        to_categorical(y_train.squeeze()),
         epochs=epochs,
         batch_size=batch_size,
         shuffle=True,
@@ -120,38 +153,70 @@ def train():
         callbacks=[checkpoint],
     )
 
+
+def save_last_weights(config, model):
+    name = get_name(config)
+    out_folder = get_out_folder(config)
     last_file = out_folder / (name + "_last_weights.h5")
     model.save_weights(str(last_file), overwrite=True)
 
 
+def load_model_from_best_weights(config):
+    name = get_name(config)
+    out_folder = get_out_folder(config)
+    model_file = out_folder / (name + "_best_weights.h5")
+    return load_model(str(model_file))
+
+
+def generate_predictions(model, x_train, masks, patch_counts, padding):
+    predictions = model.predict(x_train)
+    # predictions = np.argmax(predictions, axis=-1)
+    predictions = predictions[..., 1] > 0.5
+    predictions = predictions[..., np.newaxis]
+    predictions = predictions.astype(np.float)
+    predictions = unpatchify(predictions, patch_counts, padding)
+    return mask_images(predictions, masks)
+
+
+def save_predictions(config, predictions):
+    name = PurePath(str(get_name(config)) + "_prediction.png")
+    out_folder = get_out_folder(config)
+    save_images(out_folder, name, predictions)
+
+
+def train():
+    # tf.random.set_seed(352462476247)
+    config = load_config()
+
+    TRAIN = "train"
+    x_train, y_train = load_xy(config, TRAIN)
+    mask = load_mask(config, TRAIN)
+    x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
+    # visualize(montage(x_train, (10, 10)), "x_train sample")
+    # visualize(montage(y_train, (10, 10)), "y_train sample")
+
+    checkpoint = create_model_checkpoint(config)
+    model = create_model(config, x_train)
+    save_architecture(model.to_json(), config)
+
+    fit_model(config, model, x_train, y_train, checkpoint)
+    save_last_weights(config, model)
+
+
 def test():
     config = load_config()
-    paths = config["paths"]
-    testing_folder = PurePath(".") / paths["data"] / paths["training"]
 
-    testing = stack(load_folder(str(testing_folder / paths["images"]), ext=".tif"))
-    testing = preprocess(testing) / 255
-    # masks = stack(load_folder(str(testing_folder / paths["masks"]), ext=".gif"))
-    groundtruth = (
-        stack(load_folder(str(testing_folder / paths["groundtruth"]), ext=".gif")) / 255
-    ).astype(np.uint8)
+    TEST = "test"
+    x_test, y_test = load_xy(config, TEST)
+    mask = load_mask(config, TEST)
+    x_test, patch_count, padding = extract_structured_patches(config, x_test)
 
-    patch_shape = config["training"]["patch_shape"]
-    patches, patch_counts, padding = patchify(testing, patch_shape)
+    model = load_model_from_best_weights(config)
 
-    name = config["general"]["name"]
-    out_folder = PurePath(".") / "out" / name
-    model_file = out_folder / (name + "_best_weights.h5")
-    model = load_model(model_file)
-
-    predictions = model.predict(patches)
-    predictions = np.argmax(predictions, axis=-1)
-    predictions = predictions[..., np.newaxis]
-    predictions = unpatchify(predictions, patch_counts, padding)
-    # TODO mask out predictions
-    # TODO write predicted images to files
-    pass
+    predictions = generate_predictions(model, x_test, mask, patch_count, padding)
+    save_predictions(config, predictions)
 
 
-# train()
-test()
+if __name__ == "__main__":
+    # train()
+    test()
