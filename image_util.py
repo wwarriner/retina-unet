@@ -144,24 +144,22 @@ def unpatchify(patches, patch_counts, padding):
     """patches has NHWC
     patch_counts has HW"""
     chunk_len = np.array(patch_counts).prod()
-    # stack - N
-    images = np.stack(
-        [
-            # rows - H
-            np.concatenate(
-                [
-                    # cols - W
-                    np.concatenate(
-                        patches[y + chunk : y + patch_counts[0] + chunk], axis=0
-                    )
-                    for y in range(0, chunk_len, patch_counts[0])
-                ],
-                axis=1,
-            )
-            for chunk in range(0, patches.shape[0], chunk_len)
-        ]
-    )
-    images = images[:, : -padding[0], : -padding[1], ...]
+    base_shape = np.array(patch_counts) * np.array(patches.shape[1:-1])
+    image_shape = np.append(base_shape, patches.shape[-1])
+    image_count = patches.shape[0] // chunk_len
+    chunk_shape = (*patch_counts, *patches.shape[1:])
+    images = []
+    for i in range(image_count):
+        chunk = patches[i * chunk_len : (i + 1) * chunk_len]
+        chunk = np.reshape(chunk, chunk_shape)
+        chunk = np.transpose(chunk, (0, 2, 1, 3, 4))
+        images.append(np.reshape(chunk, image_shape))
+    images = np.stack(images)
+    space_shape = base_shape - padding
+    slices = [slice(0, x) for x in space_shape]
+    slices.append(slice(None))
+    slices.insert(0, slice(None))
+    images = images[tuple(slices)]
     return images
 
 
