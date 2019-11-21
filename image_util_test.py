@@ -85,10 +85,10 @@ class Test(unittest.TestCase):
         self.assertEqual(patches.shape[3], self.rgb.shape[2])
 
         self.assertEqual(len(patch_count), 2)
-        self.assertEqual(patch_count, list(counts.ravel()))
+        self.assertTrue((patch_count == counts.ravel()).all())
 
         self.assertEqual(len(padding), 2)
-        self.assertEqual(padding, list(reqd_padding.ravel()))
+        self.assertTrue((padding == reqd_padding.ravel()).all())
 
     def test_unpatchify(self):
         input_images = np.stack((self.rgb, self.rgb))
@@ -96,6 +96,7 @@ class Test(unittest.TestCase):
         images = unpatchify(patches, patch_count, padding)
         self.assertEqual(images.ndim, self.rgb.ndim + 1)
         self.assertEqual(images.shape, input_images.shape)
+        self.assertTrue((input_images == images).all())
 
     def test_montage(self):
         patches, _, _ = patchify(self.rgb, self.patch_shape)
