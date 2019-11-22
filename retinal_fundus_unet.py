@@ -86,7 +86,7 @@ def get_train_test_subfolder(config, train_test, sub_tag):
 def load_mask(config, test_train):
     paths = config["paths"]
     mask_folder = get_train_test_subfolder(config, test_train, "masks")
-    mask = load_folder(str(mask_folder), ext=".gif")
+    mask = load_folder(str(mask_folder))
     mask = stack(mask)
     return mask / 255
 
