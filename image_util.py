@@ -6,7 +6,7 @@ import numpy as np
 import cv2
 from PIL import Image
 
-from files import create_ext_glob
+import file_utils
 
 # TODO make this, image_preprocess.py, and patch_extract.py into a more generic
 # TODO "image_stack" class
@@ -28,9 +28,8 @@ def generate_circular_fov_mask(shape, fov_radius, offset=(0, 0)):
     return mask[..., np.newaxis]
 
 
-def load_folder(path, ext):
-    glob = create_ext_glob(ext)
-    image_files = list(Path(path).glob(glob))
+def load_folder(folder):
+    image_files = file_utils.get_contents(folder)
     return [load(str(image_file)) for image_file in image_files]
 
 

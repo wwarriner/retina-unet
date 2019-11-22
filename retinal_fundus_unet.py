@@ -94,13 +94,13 @@ def load_mask(config, test_train):
 def load_xy(config, test_train):
     paths = config["paths"]
     x_folder = get_train_test_subfolder(config, test_train, "images")
-    x = load_folder(str(x_folder), ext=".tif")
+    x = load_folder(str(x_folder))
     x = stack(x)
     x = preprocess(x) / 255
     assert (x != 0).any()
 
     y_folder = get_train_test_subfolder(config, test_train, "groundtruth")
-    y = load_folder(str(y_folder), ext=".gif")
+    y = load_folder(str(y_folder))
     y = stack(y)
     y = y / 255
     y = y.astype(np.uint8)
