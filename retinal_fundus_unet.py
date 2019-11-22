@@ -9,12 +9,13 @@ import tensorflow as tf
 from tensorflow import config
 from tensorflow.python.keras.models import model_from_json
 
+from image_preprocess import standardize
+
 devices = config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
 config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python import one_hot
-from tensorflow.python.keras.models import load_model
 from tensorflow.python.keras.utils import to_categorical
 
 import image_preprocess as ip
@@ -212,6 +213,8 @@ def train():
     x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
     # visualize(montage(x_train, (10, 10)), "x_train sample")
     # visualize(montage(y_train, (10, 10)), "y_train sample")
+
+    x_train = standardize(x_train)
 
     checkpoint = create_model_checkpoint(config)
     model = create_model(config, x_train, y_train)
