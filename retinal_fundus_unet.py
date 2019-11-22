@@ -194,7 +194,7 @@ def generate_predictions(model, x_train, masks, patch_counts, padding):
     predictions = predictions[..., np.newaxis]
     predictions = predictions.astype(np.float)
     predictions = unpatchify(predictions, patch_counts, padding)
-    return mask_images(predictions, masks)
+    return (mask_images(predictions, masks) * 255).astype(np.uint8)
 
 
 def save_predictions(config, predictions):
