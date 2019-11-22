@@ -5,17 +5,14 @@ from tensorflow.python.keras.layers import (
     Dropout,
     Input,
     MaxPooling2D,
-    Permute,
-    Reshape,
     UpSampling2D,
 )
 from tensorflow.python.keras.models import Model
 from tensorflow.keras.optimizers import SGD
-from tensorflow.python.keras.losses import CategoricalCrossentropy
+from tensorflow.python.keras.losses import categorical_crossentropy, Loss, losses_utils
 from tensorflow.python.keras.metrics import MeanIoU, Accuracy
 from tensorflow.python.keras import backend as K
-
-# TODO add tests
+from functools import reduce
 
 
 def compute_depth(base, level):
@@ -88,7 +85,27 @@ def upscale(bottom, down_convs, depth):
     return convs, ups
 
 
-def build_unet(input_shape, levels, learning_rate):
+class WeightedCategoricalCrossentropy(Loss):
+    def __init__(self, weight_vector):
+        super().__init__(
+            reduction=losses_utils.ReductionV2.AUTO,
+            name="WeightedCategoricalCrossentropy",
+        )
+        self._weight_vector = weight_vector
+        self._total_weight = sum(weight_vector)
+        self._count = len(weight_vector)
+
+    def call(self, y_true, y_pred):
+        weights = [y_true[..., i] * self._weight_vector[i] for i in range(self._count)]
+        weights = sum(weights) / self._total_weight
+        return K.mean(weights * categorical_crossentropy(y_true, y_pred), axis=-1)
+
+
+def build_unet(input_shape, levels, learning_rate=0.01, weight_vector=None):
+    CLASSES = 2
+    if weight_vector is None:
+        weight_vector = [1 / CLASSES for _ in range(CLASSES)]
+
     DEPTH = 32
     inputs = Input(input_shape)
     # convs, pools = downscale(inputs, DEPTH, levels)
@@ -121,7 +138,7 @@ def build_unet(input_shape, levels, learning_rate):
     conv5 = Dropout(0.2)(conv5)
     conv5 = Conv2D(32, (3, 3), activation="relu", padding="same")(conv5)
     #
-    conv6 = Conv2D(2, (1, 1), activation="relu", padding="same")(conv5)
+    conv6 = Conv2D(CLASSES, (1, 1), activation="relu", padding="same")(conv5)
     ############
     act = Activation("softmax")(conv6)
 
@@ -129,7 +146,7 @@ def build_unet(input_shape, levels, learning_rate):
     # TODO figure out why metrics aren't working
     model.compile(
         optimizer=SGD(lr=learning_rate),
-        loss=CategoricalCrossentropy(from_logits=False),
+        loss=WeightedCategoricalCrossentropy(weight_vector),
         metrics=[MeanIoU(num_classes=2), Accuracy()],
     )
     return model

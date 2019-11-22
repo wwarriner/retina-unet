@@ -7,6 +7,7 @@ import numpy as np
 import cv2
 import tensorflow as tf
 from tensorflow import config
+from tensorflow.python.keras.models import model_from_json
 
 devices = config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
@@ -134,10 +135,20 @@ def create_model_checkpoint(config):
     )
 
 
-def create_model(config, x_train):
+def compute_weights(y_train):
+    y_categorical = to_categorical(y_train.squeeze())
+    return [
+        y_categorical[..., i].size / y_categorical[..., i].sum()
+        for i in range(y_categorical.shape[-1])
+    ]
+
+
+def create_model(config, x_train, y_train):
+    input_shape = x_train.shape[1:]
     unet_levels = config["training"]["unet_levels"]
     learning_rate = config["training"]["learning_rate"]
-    return build_unet(x_train.shape[1:], unet_levels, learning_rate)
+    weight_vector = compute_weights(y_train)
+    return build_unet(input_shape, unet_levels, learning_rate, weight_vector)
 
 
 def fit_model(config, model, x_train, y_train, checkpoint):
@@ -162,11 +173,17 @@ def save_last_weights(config, model):
     model.save_weights(str(last_file), overwrite=True)
 
 
+# TODO fix duplication of filename suffixes
 def load_model_from_best_weights(config):
     name = get_name(config)
     out_folder = get_out_folder(config)
-    model_file = out_folder / (name + "_best_weights.h5")
-    return load_model(str(model_file))
+    json_file = out_folder / (name + "_architecture.json")
+    with open(json_file) as f:
+        json_data = f.read()
+    model = model_from_json(json_data)
+    weights_file = out_folder / (name + "_best_weights.h5")
+    model.load_weights(str(weights_file))
+    return model
 
 
 def generate_predictions(model, x_train, masks, patch_counts, padding):
@@ -197,7 +214,7 @@ def train():
     # visualize(montage(y_train, (10, 10)), "y_train sample")
 
     checkpoint = create_model_checkpoint(config)
-    model = create_model(config, x_train)
+    model = create_model(config, x_train, y_train)
     save_architecture(model.to_json(), config)
 
     fit_model(config, model, x_train, y_train, checkpoint)
