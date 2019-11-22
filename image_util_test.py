@@ -103,11 +103,14 @@ class Test(unittest.TestCase):
         count = patches.shape[0]
         montage_len = floor(count ** 0.5)
         montage_shape = (montage_len, montage_len)
-        m = montage(patches, montage_shape)
-        self.show(m, "test: unshuffled rgb patches")
+        m = montage(patches, montage_shape, mode="random")
+        self.show(m, "test: shuffled")
         # permute for visibility
-        m = montage(np.random.permutation(patches), montage_shape)
-        self.show(m, "test: shuffled rgb patches")
+        m = montage(patches, montage_shape, mode="sequential", start=0)
+        self.show(m, "test: sequential")
+        # different start
+        m = montage(patches, montage_shape, mode="sequential", start=3)
+        self.show(m, "test: sequential start=10")
 
     def test_save_load(self):
         try:

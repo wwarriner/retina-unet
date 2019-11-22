@@ -1,6 +1,7 @@
 from math import floor, ceil, log10
 from pathlib import Path, PurePath
-from itertools import cycle
+from itertools import cycle, islice
+from random import shuffle
 
 import numpy as np
 import cv2
@@ -68,18 +69,25 @@ def stack(images):
     return np.stack(images)
 
 
-def montage(images, shape):
-    it = cycle(images)
-    size = np.array(shape).prod()
-    montage = np.array([next(it) for _ in range(size)])
-    hwc_shape = images.shape[1:]
-    montage = montage.reshape(*shape, *hwc_shape)
-    n = list(range(montage.ndim))
+def montage(images, shape, mode="random", start=0):
+    indices = list(range(images.shape[0]))
+    if mode == "random":
+        shuffle(indices)
+    elif mode == "sequential":
+        pass
+    else:
+        assert False
+    iterator = cycle(indices)
+    stop = np.array(shape).prod() + start
+    iterator = islice(iterator, start, stop)
+
+    montage = images[list(iterator)]
+    montage = montage.reshape((*shape, *images.shape[1:]))
     montage = montage.transpose((0, 2, 1, 3, 4))
-    hw_shape = hwc_shape[:-1]
-    final_shape = [s * i for s, i in zip(shape, hw_shape)]
-    final_shape.append(-1)
-    return montage.reshape(final_shape)
+
+    image_shape = np.array(shape) * np.array(images.shape[1:-1])
+    image_shape = np.append(image_shape, images.shape[-1])
+    return montage.reshape(image_shape)
 
 
 def save(path, image):
