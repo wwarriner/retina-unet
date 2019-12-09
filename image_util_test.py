@@ -117,7 +117,7 @@ class Test(unittest.TestCase):
             path = PurePath("image_util_test_output.png")
             save(str(path), self.rgb.astype(np.uint8))
             self.show(load(str(path)), "test: save/load")
-            cv2.waitKey(1200)
+            cv2.waitKey(self.wait_time)
         finally:
             if Path(path).is_file():
                 Path(path).unlink()
