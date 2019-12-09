@@ -4,6 +4,9 @@ import numpy as np
 import cv2
 
 
+# TODO add pre/postcondition checks to functions
+
+
 def rgb2gray(rgb_image):
     return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
 

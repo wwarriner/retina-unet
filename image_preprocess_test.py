@@ -63,14 +63,17 @@ class Test(unittest.TestCase):
     def test_standardize(self):
         self.run_fn(self.read_image(), self.standardize)
         self.run_fn(self.generate_image(), self.standardize)
+        # TODO add structured assertions here
 
     def test_rescale(self):
         self.run_fn(self.read_image(), self.rescale)
         self.run_fn(self.generate_image(), self.rescale)
+        # TODO add structured assertions here
 
     def test_adjust_gamma(self):
         self.run_fn(self.read_image(), adjust_gamma, 2.0)
         self.run_fn(self.generate_image(), adjust_gamma, 2.0)
+        # TODO add structured assertions here
 
     def tearDown(self):
         pass

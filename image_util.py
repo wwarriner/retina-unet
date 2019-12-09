@@ -12,6 +12,8 @@ import file_utils
 # TODO make this, image_preprocess.py, and patch_extract.py into a more generic
 # TODO "image_stack" class
 
+# TODO add pre/postcondition checks
+
 
 def get_center(shape):
     """Returns the center point of an image shape, rounded down."""

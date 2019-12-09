@@ -6,6 +6,9 @@ import numpy as np
 from image_util import get_center
 
 
+# TODO add pre/postcondition checks
+
+
 def get_corner_distances(center, shape, origin=[0, 0]):
     """Returns squared distance of four corners of an axially-aligned rectangle
     from the origin. Return value is sorted ascending by y first, then x."""
@@ -32,6 +35,7 @@ def generate_random_image_point(image_shape, patch_shape):
     ]
 
 
+# TODO rework so the first argument is a tuple of image stacks
 def generate_random_patch(
     image, patch_shape, fov_mask=None, auxiliary_image=None, attempt_limit=100
 ):
