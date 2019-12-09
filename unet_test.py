@@ -47,6 +47,11 @@ class Test(unittest.TestCase):
             ]
         )
 
+    def test_compute_depth(self):
+        base = 32
+        level = 2
+        self.assertEqual(compute_depth(base, level), base * (2 ** level))
+
     def test_stacking(self):
         count = 2
         x = self.generate_x(count)
@@ -69,6 +74,15 @@ class Test(unittest.TestCase):
         y = one_hot(y.squeeze(), depth=2)
         model = build_unet(self.base_shape, self.levels)
         self.assertGreater(model.loss(x, y), 0.0)
+
+    def test_WeightedCategoricalCrossentropy(self):
+        weights = (1.0, 9.0)
+        wcce = WeightedCategoricalCrossentropy(weights)
+        y_true = np.array([[0, 1], [0, 1], [1, 0], [1, 0]]).astype(np.float)
+        y_pred = np.array([[1, 0], [0, 1], [1, 0], [0, 1]]).astype(np.float)
+        out = wcce(y_true, y_pred).numpy()
+        self.assertGreater(out, 0.0)
+        self.assertAlmostEqual(out, 4.03, 2)
 
 
 if __name__ == "__main__":
