@@ -105,7 +105,7 @@ def load_xy(config, test_train):
     y = load_folder(str(y_folder))
     y = stack(y)
     y = y / 255
-    y = y.astype(np.uint8)
+    # y = y.astype(np.uint8)
     assert (y == 1).any()
     assert (y == 0).any()
 
