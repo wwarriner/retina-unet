@@ -112,6 +112,15 @@ def load_xy(config, test_train):
     return x, y
 
 
+def extract_one_patch(config, x_train, y_train, masks):
+    patch_shape = config["training"]["patch_shape"]
+    patch_count = config["training"]["patch_count"]
+    x, y = extract_random(x_train, patch_shape, 1, masks, y_train)
+    x = np.concatenate([x for _ in range(patch_count)], axis=0)
+    y = np.concatenate([y for _ in range(patch_count)], axis=0)
+    return x, y
+
+
 def extract_random_patches(config, x_train, y_train, masks):
     patch_shape = config["training"]["patch_shape"]
     patch_count = config["training"]["patch_count"]
@@ -210,6 +219,7 @@ def train():
     TRAIN = "train"
     x_train, y_train = load_xy(config, TRAIN)
     mask = load_mask(config, TRAIN)
+    # x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
     x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
     # visualize(montage(x_train, (10, 10)), "x_train sample")
     # visualize(montage(y_train, (10, 10)), "y_train sample")
@@ -240,5 +250,5 @@ def test():
 
 
 if __name__ == "__main__":
-    # train()
+    train()
     test()
