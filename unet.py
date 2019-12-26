@@ -19,26 +19,30 @@ def compute_depth(base, level):
     return base * (2 ** level)
 
 
-def build_convolution(previous, depth):
+def build_convolution(previous, depth, name):
     SHAPE = (3, 3)
     ACT = "relu"
     PAD = "same"
     DROP = 0.2
-    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(previous)
-    drop = Dropout(DROP)(conv)
-    return Conv2D(depth, SHAPE, activation=ACT, padding=PAD)(drop)
+    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD, name=name.format(id="C1"))(
+        previous
+    )
+    drop = Dropout(DROP, name=name.format(id="DO"))(conv)
+    return Conv2D(depth, SHAPE, activation=ACT, padding=PAD, name=name.format(id="C2"))(
+        drop
+    )
 
 
-def contract(previous):
+def contract(previous, depth, name):
     SHAPE = (2, 2)
-    pool = MaxPooling2D(SHAPE)(previous)
+    pool = MaxPooling2D(SHAPE, name=name)(previous)
     return pool
 
 
-def expand(previous, transfer_conv):
+def expand(previous, transfer_conv, name, level):
     SHAPE = (2, 2)
-    up = UpSampling2D(size=SHAPE)(previous)
-    return concatenate([transfer_conv, up])
+    up = UpSampling2D(size=SHAPE, name=name)(previous)
+    return concatenate([transfer_conv, up], name="CONCATENATE_L{:d}".format(level))
 
 
 def activate(previous):
@@ -46,9 +50,8 @@ def activate(previous):
     SHAPE = (1, 1)
     ACT = "relu"
     PAD = "same"
-    ACT = "softmax"
-    act = Conv2D(DEPTH, SHAPE, activation=ACT, padding=PAD)(previous)
-    return Activation(ACT)(act)
+    act = Conv2D(DEPTH, SHAPE, activation=ACT, padding=PAD, name="FINAL_CONV")(previous)
+    return Activation("softmax", name="ACTIVATE")(act)
 
 
 def downscale(start, depth, levels):
@@ -57,17 +60,20 @@ def downscale(start, depth, levels):
     previous = start
     for i in range(levels):
         current_depth = compute_depth(depth, i)
-        conv = build_convolution(previous, current_depth)
-        pool = contract(conv)
+        name = "{name:s}_L{level:d}".format(name="CONTRACT", level=i) + "_{id:s}"
+        conv = build_convolution(previous, current_depth, name)
+        name = "POOL_FROM_{:d}_TO_{:d}".format(i, i + 1)
+        pool = contract(conv, current_depth, name)
         convs.append(conv)
         pools.append(pool)
         previous = pool
     return convs, pools
 
 
-def bottom_out(previous, depth, levels):
-    bottom_depth = compute_depth(depth, levels)
-    return build_convolution(previous, bottom_depth)
+def bottom_out(previous, depth, level):
+    bottom_depth = compute_depth(depth, level)
+    name = "{name:s}_L{level:d}".format(name="BOTTOM", level=level) + "_{id:s}"
+    return build_convolution(previous, bottom_depth, name)
 
 
 def upscale(bottom, down_convs, depth):
@@ -77,8 +83,10 @@ def upscale(bottom, down_convs, depth):
     levels = len(down_convs)
     for i in reversed(range(levels)):
         current_depth = compute_depth(depth, i)
-        up = expand(previous, down_convs[i])
-        conv = build_convolution(up, current_depth)
+        name = "UPSCALE_FROM_{:d}_TO_{:d}".format(i + 1, i)
+        up = expand(previous, down_convs[i], name, i)
+        name = "{name:s}_L{level:d}".format(name="EXPAND", level=i) + "_{id:s}"
+        conv = build_convolution(up, current_depth, name)
         ups.append(up)
         convs.append(conv)
         previous = conv
