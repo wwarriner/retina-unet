@@ -78,8 +78,8 @@ class Test(unittest.TestCase):
     def test_WeightedCategoricalCrossentropy(self):
         weights = (1.0, 9.0)
         wcce = WeightedCategoricalCrossentropy(weights)
-        y_true = np.array([[0, 1], [0, 1], [1, 0], [1, 0]]).astype(np.float)
-        y_pred = np.array([[1, 0], [0, 1], [1, 0], [0, 1]]).astype(np.float)
+        y_true = np.array([[[0, 1], [0, 1]], [[1, 0], [1, 0]]]).astype(np.float)
+        y_pred = np.array([[[1, 0], [0, 1]], [[1, 0], [0, 1]]]).astype(np.float)
         out = wcce(y_true, y_pred).numpy()
         self.assertGreater(out, 0.0)
         self.assertAlmostEqual(out, 4.03, 2)

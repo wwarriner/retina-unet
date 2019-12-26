@@ -98,7 +98,7 @@ class WeightedCategoricalCrossentropy(Loss):
     def call(self, y_true, y_pred):
         weights = [y_true[..., i] * self._weight_vector[i] for i in range(self._count)]
         weights = sum(weights) / self._total_weight
-        return K.mean(weights * categorical_crossentropy(y_true, y_pred), axis=-1)
+        return weights * categorical_crossentropy(y_true, y_pred)
 
 
 def build_unet(input_shape, levels, learning_rate=0.01, weight_vector=None):
