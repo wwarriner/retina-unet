@@ -71,7 +71,7 @@ def stack(images):
     return np.stack(images)
 
 
-def montage(images, shape, mode="random", start=0):
+def montage(images, shape, mode="sequential", start=0):
     indices = list(range(images.shape[0]))
     if mode == "random":
         shuffle(indices)

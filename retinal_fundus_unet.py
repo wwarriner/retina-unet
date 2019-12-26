@@ -215,6 +215,7 @@ def train():
     # visualize(montage(y_train, (10, 10)), "y_train sample")
 
     x_train = standardize(x_train)
+    # visualize(montage(x_train, (10, 10)), "x_train std sample")
 
     checkpoint = create_model_checkpoint(config)
     model = create_model(config, x_train, y_train)
