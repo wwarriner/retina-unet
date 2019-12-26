@@ -23,6 +23,9 @@ from image_util import *
 import patch_extract as pe
 from unet import build_unet
 
+# TODO cleanup of imports
+# TODO refactor functions here with functionality in other modules
+
 
 def preprocess(images):
     # 1st dim is stack, 2nd & 3rd are spatial, 4th is channels

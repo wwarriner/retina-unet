@@ -14,6 +14,8 @@ from tensorflow.python.keras.metrics import MeanIoU, Accuracy
 from tensorflow.python.keras import backend as K
 from functools import reduce
 
+# TODO turn this into a class
+
 
 def compute_depth(base, level):
     return base * (2 ** level)
