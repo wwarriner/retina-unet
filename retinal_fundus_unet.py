@@ -19,7 +19,7 @@ from lib.config_snake.config import ConfigFile
 import image_preprocess as ip
 from image_util import *
 import patch_extract as pe
-from unet import build_unet
+from unet import WeightedCategoricalCrossentropy, Unet
 
 # TODO cleanup of imports
 # TODO refactor functions here with functionality in other modules
@@ -107,7 +107,7 @@ def load_xy(config, test_train):
 
 
 def extract_one_patch(config, x_train, y_train, masks):
-    patch_shape = config.training.patch_shape
+    patch_shape = config.training.unet.input_shape
     patch_count = config.training.patch_count
     x, y = extract_random(x_train, patch_shape, 1, masks, y_train)
     x = np.concatenate([x for _ in range(patch_count)], axis=0)
@@ -116,7 +116,7 @@ def extract_one_patch(config, x_train, y_train, masks):
 
 
 def extract_random_patches(config, x_train, y_train, masks):
-    patch_shape = config.training.patch_shape
+    patch_shape = config.training.unet.input_shape
     patch_count = config.training.patch_count
     return extract_random(x_train, patch_shape, patch_count, masks, y_train)
 
@@ -149,10 +149,13 @@ def compute_weights(y_train):
 
 def create_model(config, x_train, y_train):
     input_shape = x_train.shape[1:]
-    unet_levels = config.training.unet_levels
-    learning_rate = config.training.learning_rate
+    unet_levels = config.training.unet.level_count
+    learning_rate = config.training.unet.learning_rate
     weight_vector = compute_weights(y_train)
-    return build_unet(input_shape, unet_levels, learning_rate, weight_vector)
+    wcce = WeightedCategoricalCrossentropy(weight_vector)
+    unet = Unet()
+    unet.loss = wcce
+    return unet.build()
 
 
 def fit_model(config, model, x_train, y_train, checkpoint):

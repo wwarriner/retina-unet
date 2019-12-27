@@ -14,86 +14,6 @@ from tensorflow.python.keras.metrics import MeanIoU, Accuracy
 from tensorflow.python.keras import backend as K
 from functools import reduce
 
-# TODO turn this into a class
-
-
-def compute_depth(base, level):
-    return base * (2 ** level)
-
-
-def build_convolution(previous, depth, name):
-    SHAPE = (3, 3)
-    ACT = "relu"
-    PAD = "same"
-    DROP = 0.2
-    conv = Conv2D(depth, SHAPE, activation=ACT, padding=PAD, name=name.format(id="C1"))(
-        previous
-    )
-    drop = Dropout(DROP, name=name.format(id="DO"))(conv)
-    return Conv2D(depth, SHAPE, activation=ACT, padding=PAD, name=name.format(id="C2"))(
-        drop
-    )
-
-
-def contract(previous, depth, name):
-    SHAPE = (2, 2)
-    pool = MaxPooling2D(SHAPE, name=name)(previous)
-    return pool
-
-
-def expand(previous, transfer_conv, name, level):
-    SHAPE = (2, 2)
-    up = UpSampling2D(size=SHAPE, name=name)(previous)
-    return concatenate([transfer_conv, up], name="CONCATENATE_L{:d}".format(level))
-
-
-def activate(previous):
-    DEPTH = 2
-    SHAPE = (1, 1)
-    ACT = "relu"
-    PAD = "same"
-    act = Conv2D(DEPTH, SHAPE, activation=ACT, padding=PAD, name="FINAL_CONV")(previous)
-    return Activation("softmax", name="ACTIVATE")(act)
-
-
-def downscale(start, depth, levels):
-    convs = []
-    pools = []
-    previous = start
-    for i in range(levels):
-        current_depth = compute_depth(depth, i)
-        name = "{name:s}_L{level:d}".format(name="CONTRACT", level=i) + "_{id:s}"
-        conv = build_convolution(previous, current_depth, name)
-        name = "POOL_FROM_{:d}_TO_{:d}".format(i, i + 1)
-        pool = contract(conv, current_depth, name)
-        convs.append(conv)
-        pools.append(pool)
-        previous = pool
-    return convs, pools
-
-
-def bottom_out(previous, depth, level):
-    bottom_depth = compute_depth(depth, level)
-    name = "{name:s}_L{level:d}".format(name="BOTTOM", level=level) + "_{id:s}"
-    return build_convolution(previous, bottom_depth, name)
-
-
-def upscale(bottom, down_convs, depth):
-    convs = []
-    ups = []
-    previous = bottom
-    levels = len(down_convs)
-    for i in reversed(range(levels)):
-        current_depth = compute_depth(depth, i)
-        name = "UPSCALE_FROM_{:d}_TO_{:d}".format(i + 1, i)
-        up = expand(previous, down_convs[i], name, i)
-        name = "{name:s}_L{level:d}".format(name="EXPAND", level=i) + "_{id:s}"
-        conv = build_convolution(up, current_depth, name)
-        ups.append(up)
-        convs.append(conv)
-        previous = conv
-    return convs, ups
-
 
 class WeightedCategoricalCrossentropy(Loss):
     def __init__(self, weight_vector):
@@ -111,22 +31,130 @@ class WeightedCategoricalCrossentropy(Loss):
         return weights * categorical_crossentropy(y_true, y_pred)
 
 
-def build_unet(input_shape, levels, learning_rate=0.01, weight_vector=None):
-    CLASSES = 2
-    if weight_vector is None:
-        weight_vector = [1 / CLASSES for _ in range(CLASSES)]
+# TODO can't change name parameter of layers, have to set as we go...
+# TODO expose hyperparameters
+# TODO fix tests
+class Unet:
+    def __init__(self):
+        self._level_count = 2
+        self._base_filter_count = 32
+        self._input_shape = (48, 48)
+        self._convolution_activation = "relu"
+        self._final_activation = "softmax"
+        self._padding = "same"
+        self._dropout_rate = 0.2
+        self._convolution_shape = (3, 3)
+        self._pooling_shape = (2, 2)
+        self._learning_rate = 1
+        self._loss = None
 
-    BASE_DEPTH = 32
-    inputs = Input(input_shape)
-    convs, pools = downscale(inputs, BASE_DEPTH, levels)
-    bottom = bottom_out(pools[-1], BASE_DEPTH, levels)
-    convs, _ = upscale(bottom, convs, BASE_DEPTH)
-    act = activate(convs[-1])
+        self._level = 0
 
-    model = Model(inputs=inputs, outputs=act)
-    model.compile(
-        optimizer=SGD(lr=learning_rate),
-        loss=WeightedCategoricalCrossentropy(weight_vector),
-        metrics=[MeanIoU(num_classes=2), Accuracy()],
-    )
-    return model
+    @property
+    def loss(self):
+        return self._loss
+
+    @loss.setter
+    def loss(self, value):
+        self._loss = value
+
+    def build(self):
+        assert self._loss is not None
+
+        input_layer = self._build_input()
+        input_layer.name = "INPUT"
+
+        convs = []
+        pools = []
+        previous = input_layer
+        for _ in range(self._level_count):
+            conv, pool = self._build_contraction_block(previous)
+            previous = pool
+            convs.append(conv)
+            pools.append(pool)
+
+        bottom = self._build_convolution_block(previous, "BOTTOM")
+        previous = bottom
+
+        skips = []
+        for conv in reversed(convs):
+            skip = self._build_expansion_block(conv, previous)
+            previous = skip
+            skips.append(skip)
+
+        activation = self._build_activation()(previous)
+
+        model = Model(inputs=input_layer, outputs=activation)
+        model.compile(
+            optimizer=SGD(lr=self._learning_rate),
+            loss=self._loss,
+            metrics=[MeanIoU(num_classes=2), Accuracy()],
+        )
+        return model
+
+    def _build_expansion_block(self, contraction_conv, previous_layer):
+        PREFIX = "EXPANSION"
+        conv = self._build_convolution_block(previous_layer, PREFIX)
+        up_sample = self._build_up_sample()(conv)
+        up_sample.name = self._build_name(PREFIX, "UP")
+        skip = self._build_skip_connection(contraction_conv, up_sample)(up_sample)
+        skip.name = self._build_name(PREFIX, "SKIP")
+        self.level -= 1
+        return skip
+
+    def _build_contraction_block(self, previous_layer):
+        PREFIX = "CONTRACTION"
+        conv = self._build_convolution_block(previous_layer, PREFIX)
+        pool = self._build_max_pool()(conv)
+        pool.name = self._build_name(PREFIX, "PL")
+        self._level += 1
+        return pool, conv
+
+    def _build_convolution_block(self, previous_layer, prefix):
+        conv = self._build_convolution()(previous_layer)
+        conv.name = self._build_name(prefix, "C1")
+        dropout = self._build_dropout()(conv)
+        dropout.name = self._build_name(prefix, "DO")
+        conv2 = self._build_convolution()(dropout)
+        conv2.name = self._build_name(prefix, "C2")
+        return conv2
+
+    def _build_input(self):
+        return Input(self._input_shape)
+
+    def _build_convolution(self):
+        return Conv2D(
+            filter=self._filter_count,
+            kernel_size=self._convolution_shape,
+            activation=self._convolution_activation,
+            padding=self._padding,
+        )
+
+    def _build_dropout(self):
+        return Dropout(self._dropout_rate)
+
+    def _build_max_pool(self):
+        return MaxPooling2D(self._pooling_shape)
+
+    def _build_up_sample(self):
+        return UpSampling2D(size=self._pooling_shape)
+
+    def _build_skip_connection(self, conv, up_sample):
+        return concatenate([conv, up_sample])
+
+    def _build_activation(self):
+        conv = self._build_convolution()
+        conv.kernel_size = (1, 1)
+        conv.name = "FINAL_CONVOLUTION"
+        act = Activation(activation="softmax")(conv)
+        act.name = "ACTIVATE"
+        return act
+
+    def _build_name(self, prefix, identifier):
+        return "{prefix:s}_L{level:s}_{id:s}".format(
+            prefix=prefix, level=self._level, id=identifier
+        )
+
+    @property
+    def _filter_count(self):
+        return self._base_filter_count * (2 ** self._level)
