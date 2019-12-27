@@ -1,11 +1,7 @@
 from itertools import repeat
-import json
 from pathlib import PurePath
-import random
 
 import numpy as np
-import cv2
-import tensorflow as tf
 from tensorflow import config
 from tensorflow.python.keras.models import model_from_json
 
@@ -17,6 +13,8 @@ config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python import one_hot
 from tensorflow.python.keras.utils import to_categorical
+
+from lib.config_snake.config import ConfigFile
 
 import image_preprocess as ip
 from image_util import *
@@ -62,11 +60,6 @@ def extract_random(images, patch_shape, patch_count, masks=None, auxiliary_image
     return map(np.stack, zip(*raw))
 
 
-def load_config():
-    with open("./config.json") as f:
-        return json.load(f)
-
-
 def save_architecture(json_str, config):
     model_file = get_out_folder(config) / (get_name(config) + "_architecture.json")
     with open(model_file, "w") as f:
@@ -74,7 +67,7 @@ def save_architecture(json_str, config):
 
 
 def get_name(config):
-    return config["general"]["name"]
+    return config.general.name
 
 
 def get_out_folder(config):
@@ -84,12 +77,11 @@ def get_out_folder(config):
 
 
 def get_train_test_subfolder(config, train_test, sub_tag):
-    paths = config["paths"]
-    return PurePath(".") / paths["data"] / paths[train_test] / paths[sub_tag]
+    paths = config.paths
+    return PurePath(".") / paths.data / paths[train_test] / paths[sub_tag]
 
 
 def load_mask(config, test_train):
-    paths = config["paths"]
     mask_folder = get_train_test_subfolder(config, test_train, "masks")
     mask = load_folder(str(mask_folder))
     mask = stack(mask)
@@ -97,7 +89,6 @@ def load_mask(config, test_train):
 
 
 def load_xy(config, test_train):
-    paths = config["paths"]
     x_folder = get_train_test_subfolder(config, test_train, "images")
     x = load_folder(str(x_folder))
     x = stack(x)
@@ -116,8 +107,8 @@ def load_xy(config, test_train):
 
 
 def extract_one_patch(config, x_train, y_train, masks):
-    patch_shape = config["training"]["patch_shape"]
-    patch_count = config["training"]["patch_count"]
+    patch_shape = config.training.patch_shape
+    patch_count = config.training.patch_count
     x, y = extract_random(x_train, patch_shape, 1, masks, y_train)
     x = np.concatenate([x for _ in range(patch_count)], axis=0)
     y = np.concatenate([y for _ in range(patch_count)], axis=0)
@@ -125,13 +116,13 @@ def extract_one_patch(config, x_train, y_train, masks):
 
 
 def extract_random_patches(config, x_train, y_train, masks):
-    patch_shape = config["training"]["patch_shape"]
-    patch_count = config["training"]["patch_count"]
+    patch_shape = config.training.patch_shape
+    patch_count = config.training.patch_count
     return extract_random(x_train, patch_shape, patch_count, masks, y_train)
 
 
 def extract_structured_patches(config, x_test):
-    patch_shape = config["training"]["patch_shape"]
+    patch_shape = config.training.patch_count
     return patchify(x_test, patch_shape)
 
 
@@ -158,16 +149,16 @@ def compute_weights(y_train):
 
 def create_model(config, x_train, y_train):
     input_shape = x_train.shape[1:]
-    unet_levels = config["training"]["unet_levels"]
-    learning_rate = config["training"]["learning_rate"]
+    unet_levels = config.training.unet_levels
+    learning_rate = config.training.learning_rate
     weight_vector = compute_weights(y_train)
     return build_unet(input_shape, unet_levels, learning_rate, weight_vector)
 
 
 def fit_model(config, model, x_train, y_train, checkpoint):
-    epochs = config["training"]["epochs"]
-    batch_size = config["training"]["batch_size"]
-    split = config["training"]["validation_split"]
+    epochs = config.training.epochs
+    batch_size = config.training.batch_size
+    split = config.training.validation_split
     model.fit(
         x_train,
         to_categorical(y_train.squeeze()),
@@ -217,7 +208,7 @@ def save_predictions(config, predictions):
 
 def train():
     # tf.random.set_seed(352462476247)
-    config = load_config()
+    config = ConfigFile("config.json")
 
     TRAIN = "train"
     x_train, y_train = load_xy(config, TRAIN)
@@ -239,7 +230,7 @@ def train():
 
 
 def test():
-    config = load_config()
+    config = ConfigFile("config.json")
 
     TEST = "test"
     x_test, y_test = load_xy(config, TEST)
