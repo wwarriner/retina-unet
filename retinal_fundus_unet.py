@@ -147,14 +147,16 @@ def compute_weights(y_train):
     ]
 
 
+def compute_class_count(y_train):
+    y_categorical = to_categorical(y_train.squeeze())
+    return y_categorical.shape[-1]
+
+
 def create_model(config, x_train, y_train):
-    input_shape = x_train.shape[1:]
-    unet_levels = config.training.unet.level_count
-    learning_rate = config.training.unet.learning_rate
+    unet = Unet(compute_class_count(y_train), **config.training.unet.to_json())
     weight_vector = compute_weights(y_train)
-    wcce = WeightedCategoricalCrossentropy(weight_vector)
-    unet = Unet()
-    unet.loss = wcce
+    loss = WeightedCategoricalCrossentropy(weight_vector)
+    unet.loss = loss
     return unet.build()
 
 
@@ -216,8 +218,8 @@ def train():
     TRAIN = "train"
     x_train, y_train = load_xy(config, TRAIN)
     mask = load_mask(config, TRAIN)
-    # x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
-    x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
+    x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
+    # x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
     # visualize(montage(x_train, (10, 10)), "x_train sample")
     # visualize(montage(y_train, (10, 10)), "y_train sample")
 

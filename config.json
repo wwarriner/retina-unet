@@ -15,14 +15,14 @@
     "unet": {
       "level_count": 3,
       "base_filter_count": 32,
-      "input_shape": [48, 48],
+      "input_shape": [48, 48, 1],
       "convolution_activation": "relu",
       "final_activation": "softmax",
       "padding": "same",
       "dropout_rate": 0.2,
       "convolution_kernel_size": [3, 3],
       "pooling_shape": [2, 2],
-      "learning_rate": 1e-3
+      "learning_rate": 1
     },
     "patch_count": 1000,
     "inside_fov": true,
