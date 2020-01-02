@@ -27,7 +27,12 @@
       "dropout_rate": 0.2,
       "convolution_kernel_size": [3, 3],
       "pooling_shape": [2, 2],
-      "learning_rate": 1
+      "learning_rate": {
+        "initial_learning_rate": 1.0,
+        "decay_steps": 10000,
+        "decay_rate": 0.99,
+        "staircase": true
+      }
     },
     "patch_count": 1000,
     "inside_fov": true,

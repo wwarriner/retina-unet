@@ -9,10 +9,17 @@ from tensorflow.python.keras.layers import (
 )
 from tensorflow.python.keras.models import Model
 from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.optimizers.schedules import (
+    PiecewiseConstantDecay,
+    ExponentialDecay,
+)
 from tensorflow.python.keras.losses import categorical_crossentropy, Loss, losses_utils
 from tensorflow.python.keras.metrics import MeanIoU, Accuracy
 from tensorflow.python.keras import backend as K
 from functools import reduce
+
+
+# TODO implement/test GIoU loss function
 
 
 class WeightedCategoricalCrossentropy(Loss):
@@ -75,9 +82,17 @@ class Unet:
         assert len(self._pooling_shape) == 2
         assert 1 < min(self._pooling_shape)
 
-        self._learning_rate = kwargs["learning_rate"]
-        assert isinstance(self._learning_rate, (float, int))
-        assert 0.0 < self._learning_rate < float("inf")
+        learning_rate = kwargs["learning_rate"]
+        is_schedule = isinstance(learning_rate, dict)
+        if not is_schedule:
+            assert isinstance(learning_rate, (float, int))
+            assert 0.0 < learning_rate < float("inf")
+            learning_rate = lambda x: learning_rate
+        elif "boundaries" in learning_rate:
+            learning_rate = PiecewiseConstantDecay(**learning_rate)
+        elif "decay_rate" in learning_rate:
+            learning_rate = ExponentialDecay(**learning_rate)
+        self._learning_rate = learning_rate
 
         self._loss = None
         self._level = 0
@@ -119,7 +134,7 @@ class Unet:
 
         model = Model(inputs=input_layer, outputs=activation)
         model.compile(
-            optimizer=SGD(lr=self._learning_rate),
+            optimizer=SGD(learning_rate=self._learning_rate),
             loss=self._loss,
             metrics=[MeanIoU(num_classes=2), Accuracy()],
         )
