@@ -1,0 +1,24 @@
+{
+  "level_count": 3,
+  "base_filter_count": 32,
+  "input_shape": [48, 48, 1],
+  "convolution_activation": "relu",
+  "final_activation": "softmax",
+  "padding": "same",
+  "dropout_rate": 0.2,
+  "convolution_kernel_size": [3, 3],
+  "pooling_shape": [2, 2],
+  "learning_rate": {
+    "initial_learning_rate": 1.0,
+    "decay_steps": 10000,
+    "decay_rate": 0.99,
+    "staircase": true
+  },
+  "reproducibility": {
+    "ENABLED": true,
+    "python_hash_seed": 314159,
+    "python_random_seed": 314159,
+    "numpy_random_seed": 314159,
+    "tensorflow_random_seed": 314159
+  }
+}
