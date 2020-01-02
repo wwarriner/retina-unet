@@ -1,3 +1,8 @@
+import os
+import random
+
+import numpy as np
+import tensorflow as tf
 from tensorflow.python.keras.layers import (
     Activation,
     concatenate,
@@ -8,6 +13,7 @@ from tensorflow.python.keras.layers import (
     UpSampling2D,
 )
 from tensorflow.python.keras.models import Model
+from tensorflow.keras.initializers import GlorotUniform
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.optimizers.schedules import (
     PiecewiseConstantDecay,
@@ -94,6 +100,17 @@ class Unet:
             learning_rate = ExponentialDecay(**learning_rate)
         self._learning_rate = learning_rate
 
+        r = kwargs["reproducibility"]
+        tf_random_seed = None
+        if r["ENABLED"]:
+            os.environ["PYTHONHASHSEED"] = str(r["python_hash_seed"])
+            os.environ["TF_CUDNN_DETERMINISTIC"] = str(1)
+            random.seed(r["python_random_seed"])
+            np.random.seed(r["numpy_random_seed"])
+            tf_random_seed = r["tensorflow_random_seed"]
+            tf.random.set_seed(tf_random_seed)
+        self._tf_random_seed = tf_random_seed
+
         self._loss = None
         self._level = 0
 
@@ -176,6 +193,7 @@ class Unet:
             kernel_size=self._kernel_size,
             activation=self._convolution_activation,
             padding=self._padding,
+            kernel_initializer=self._get_initializer(),
             name=name,
         )
 
@@ -185,11 +203,15 @@ class Unet:
             kernel_size=(1, 1),
             activation=self._convolution_activation,
             padding=self._padding,
+            kernel_initializer=self._get_initializer(),
             name="FINAL_CONVOLUTION",
         )
 
     def _build_dropout(self, name):
-        return Dropout(self._dropout_rate, name=name)
+        return Dropout(self._dropout_rate, seed=self._tf_random_seed, name=name)
+
+    def _get_initializer(self):
+        return GlorotUniform(seed=self._tf_random_seed)
 
     def _build_max_pool(self, name):
         return MaxPooling2D(self._pooling_shape, name=name)
