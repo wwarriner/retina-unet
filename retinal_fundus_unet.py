@@ -218,13 +218,17 @@ def train():
     TRAIN = "train"
     x_train, y_train = load_xy(config, TRAIN)
     mask = load_mask(config, TRAIN)
+    if config.debugging.ENABLED and config.debugging.single_training_example:
     x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
-    # x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
-    # visualize(montage(x_train, (10, 10)), "x_train sample")
-    # visualize(montage(y_train, (10, 10)), "y_train sample")
+    else:
+        x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
 
     x_train = standardize(x_train)
-    # visualize(montage(x_train, (10, 10)), "x_train std sample")
+
+    if config.debugging.ENABLED and config.debugging.show_montages:
+        visualize(montage(x_train, (10, 10)), "x_train sample")
+        visualize(montage(x_train, (10, 10)), "x_train std sample")
+        visualize(montage(y_train, (10, 10)), "y_train sample")
 
     checkpoint = create_model_checkpoint(config)
     model = create_model(config, x_train, y_train)

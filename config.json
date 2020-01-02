@@ -11,6 +11,11 @@
     "name": "test",
     "logging": true
   },
+  "debugging": {
+    "ENABLED": false,
+    "single_training_example": false,
+    "show_montages": true
+  },
   "training": {
     "unet": {
       "level_count": 3,
