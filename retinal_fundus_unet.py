@@ -1,5 +1,5 @@
 from itertools import repeat
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
 import numpy as np
 from tensorflow import config
@@ -20,21 +20,50 @@ from image_util import *
 import patch_extract as pe
 from unet import WeightedCategoricalCrossentropy, Unet
 
-# TODO cleanup of imports
 # TODO refactor functions here with functionality in other modules
-# TODO expose random seeds in config
 
 
-def preprocess(images):
-    # 1st dim is stack, 2nd & 3rd are spatial, 4th is channels
-    out = np.array([ip.rgb2gray(image) for image in images])
-    out = ip.standardize(out)
-    out = ip.rescale(out, out_range=(0, 255)).astype(np.uint8)
-    out = np.array([ip.apply_clahe(image) for image in out])
-    out = np.array([ip.adjust_gamma(image, 1.2) for image in out])
-    # functions stripped 4th dim, so add back
-    out = out[..., np.newaxis]
-    return out
+def compute_class_count(y_train):
+    y_categorical = to_categorical(y_train.squeeze())
+    return y_categorical.shape[-1]
+
+
+def compute_weights(y_train):
+    y_categorical = to_categorical(y_train.squeeze())
+    return [
+        y_categorical[..., i].size / y_categorical[..., i].sum()
+        for i in range(y_categorical.shape[-1])
+    ]
+
+
+def create_model(config, x_train, y_train):
+    unet = Unet(compute_class_count(y_train), **config.training.unet.to_json())
+    weight_vector = compute_weights(y_train)
+    loss = WeightedCategoricalCrossentropy(weight_vector)
+    unet.loss = loss
+    return unet.build()
+
+
+def create_model_checkpoint(config):
+    name = get_name(config)
+    out_folder = get_out_folder(config)
+    checkpoint_file = out_folder / (name + "_best_weights.h5")
+    return ModelCheckpoint(
+        filepath=str(checkpoint_file),
+        verbose=1,
+        monitor="val_loss",
+        mode="auto",
+        save_best_only=True,
+    )
+
+
+def extract_one_patch(config, x_train, y_train, masks):
+    patch_shape = config.training.unet.input_shape
+    patch_count = config.training.patch_count
+    x, y = extract_random(x_train, patch_shape, 1, masks, y_train)
+    x = np.concatenate([x for _ in range(patch_count)], axis=0)
+    y = np.concatenate([y for _ in range(patch_count)], axis=0)
+    return x, y
 
 
 def extract_random(images, patch_shape, patch_count, masks=None, auxiliary_images=None):
@@ -60,10 +89,40 @@ def extract_random(images, patch_shape, patch_count, masks=None, auxiliary_image
     return map(np.stack, zip(*raw))
 
 
-def save_architecture(json_str, config):
-    model_file = get_out_folder(config) / (get_name(config) + "_architecture.json")
-    with open(model_file, "w") as f:
-        f.write(json_str)
+def extract_random_patches(config, x_train, y_train, masks):
+    patch_shape = config.training.unet.input_shape
+    patch_count = config.training.patch_count
+    return extract_random(x_train, patch_shape, patch_count, masks, y_train)
+
+
+def extract_structured_patches(config, x_test):
+    patch_shape = config.training.unet.input_shape[0:-1]
+    return patchify(x_test, patch_shape)
+
+
+def fit_model(config, model, x_train, y_train):
+    epochs = config.training.epochs
+    batch_size = config.training.batch_size
+    split = config.training.validation_split
+    checkpoint = create_model_checkpoint(config)
+    model.fit(
+        x_train,
+        to_categorical(y_train.squeeze()),
+        epochs=epochs,
+        batch_size=batch_size,
+        shuffle=True,
+        validation_split=split,
+        callbacks=[checkpoint],
+    )
+
+
+def generate_predictions(model, x_train, masks, patch_counts, padding):
+    predictions = model.predict(x_train)
+    predictions = predictions[..., 1] > 0.5
+    predictions = predictions[..., np.newaxis]
+    predictions = predictions.astype(np.float)
+    predictions = unpatchify(predictions, patch_counts, padding)
+    return (mask_images(predictions, masks) * 255).astype(np.uint8)
 
 
 def get_name(config):
@@ -88,6 +147,19 @@ def load_mask(config, test_train):
     return mask / 255
 
 
+# TODO fix duplication of filename suffixes
+def load_model_from_best_weights(config):
+    name = get_name(config)
+    out_folder = get_out_folder(config)
+    json_file = out_folder / (name + "_architecture.json")
+    with open(json_file) as f:
+        json_data = f.read()
+    model = model_from_json(json_data)
+    weights_file = out_folder / (name + "_best_weights.h5")
+    model.load_weights(str(weights_file))
+    return model
+
+
 def load_xy(config, test_train):
     x_folder = get_train_test_subfolder(config, test_train, "images")
     x = load_folder(str(x_folder))
@@ -105,73 +177,22 @@ def load_xy(config, test_train):
     return x, y
 
 
-def extract_one_patch(config, x_train, y_train, masks):
-    patch_shape = config.training.unet.input_shape
-    patch_count = config.training.patch_count
-    x, y = extract_random(x_train, patch_shape, 1, masks, y_train)
-    x = np.concatenate([x for _ in range(patch_count)], axis=0)
-    y = np.concatenate([y for _ in range(patch_count)], axis=0)
-    return x, y
+def preprocess(images):
+    # 1st dim is stack, 2nd & 3rd are spatial, 4th is channels
+    out = np.array([ip.rgb2gray(image) for image in images])
+    out = ip.rescale(out, out_range=(0, 255)).astype(np.uint8)
+    out = np.array([ip.apply_clahe(image) for image in out])
+    out = np.array([ip.adjust_gamma(image, 1.2) for image in out])
+    out = ip.standardize(out)
+    # functions stripped 4th dim, so add back
+    out = out[..., np.newaxis]
+    return out
 
 
-def extract_random_patches(config, x_train, y_train, masks):
-    patch_shape = config.training.unet.input_shape
-    patch_count = config.training.patch_count
-    return extract_random(x_train, patch_shape, patch_count, masks, y_train)
-
-
-def extract_structured_patches(config, x_test):
-    patch_shape = config.training.unet.input_shape[0:-1]
-    return patchify(x_test, patch_shape)
-
-
-def create_model_checkpoint(config):
-    name = get_name(config)
-    out_folder = get_out_folder(config)
-    checkpoint_file = out_folder / (name + "_best_weights.h5")
-    return ModelCheckpoint(
-        filepath=str(checkpoint_file),
-        verbose=1,
-        monitor="val_loss",
-        mode="auto",
-        save_best_only=True,
-    )
-
-
-def compute_weights(y_train):
-    y_categorical = to_categorical(y_train.squeeze())
-    return [
-        y_categorical[..., i].size / y_categorical[..., i].sum()
-        for i in range(y_categorical.shape[-1])
-    ]
-
-
-def compute_class_count(y_train):
-    y_categorical = to_categorical(y_train.squeeze())
-    return y_categorical.shape[-1]
-
-
-def create_model(config, x_train, y_train):
-    unet = Unet(compute_class_count(y_train), **config.training.unet.to_json())
-    weight_vector = compute_weights(y_train)
-    loss = WeightedCategoricalCrossentropy(weight_vector)
-    unet.loss = loss
-    return unet.build()
-
-
-def fit_model(config, model, x_train, y_train, checkpoint):
-    epochs = config.training.epochs
-    batch_size = config.training.batch_size
-    split = config.training.validation_split
-    model.fit(
-        x_train,
-        to_categorical(y_train.squeeze()),
-        epochs=epochs,
-        batch_size=batch_size,
-        shuffle=True,
-        validation_split=split,
-        callbacks=[checkpoint],
-    )
+def save_architecture(json_str, config):
+    model_file = get_out_folder(config) / (get_name(config) + "_architecture.json")
+    with open(model_file, "w") as f:
+        f.write(json_str)
 
 
 def save_last_weights(config, model):
@@ -181,59 +202,10 @@ def save_last_weights(config, model):
     model.save_weights(str(last_file), overwrite=True)
 
 
-# TODO fix duplication of filename suffixes
-def load_model_from_best_weights(config):
-    name = get_name(config)
-    out_folder = get_out_folder(config)
-    json_file = out_folder / (name + "_architecture.json")
-    with open(json_file) as f:
-        json_data = f.read()
-    model = model_from_json(json_data)
-    weights_file = out_folder / (name + "_best_weights.h5")
-    model.load_weights(str(weights_file))
-    return model
-
-
-def generate_predictions(model, x_train, masks, patch_counts, padding):
-    predictions = model.predict(x_train)
-    predictions = predictions[..., 1] > 0.5
-    predictions = predictions[..., np.newaxis]
-    predictions = predictions.astype(np.float)
-    predictions = unpatchify(predictions, patch_counts, padding)
-    return (mask_images(predictions, masks) * 255).astype(np.uint8)
-
-
 def save_predictions(config, predictions):
     name = PurePath(str(get_name(config)) + "_prediction.png")
     out_folder = get_out_folder(config)
     save_images(out_folder, name, predictions)
-
-
-def train():
-    # tf.random.set_seed(352462476247)
-    config = ConfigFile("config.json")
-
-    TRAIN = "train"
-    x_train, y_train = load_xy(config, TRAIN)
-    mask = load_mask(config, TRAIN)
-    if config.debugging.ENABLED and config.debugging.single_training_example:
-    x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
-    else:
-        x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
-
-    x_train = standardize(x_train)
-
-    if config.debugging.ENABLED and config.debugging.show_montages:
-        visualize(montage(x_train, (10, 10)), "x_train sample")
-        visualize(montage(x_train, (10, 10)), "x_train std sample")
-        visualize(montage(y_train, (10, 10)), "y_train sample")
-
-    checkpoint = create_model_checkpoint(config)
-    model = create_model(config, x_train, y_train)
-    save_architecture(model.to_json(), config)
-
-    fit_model(config, model, x_train, y_train, checkpoint)
-    save_last_weights(config, model)
 
 
 def test():
@@ -250,6 +222,29 @@ def test():
     save_predictions(config, predictions)
 
 
+def train():
+    config = ConfigFile("config.json")
+
+    TRAIN = "train"
+    x_train, y_train = load_xy(config, TRAIN)
+    mask = load_mask(config, TRAIN)
+    if config.debugging.ENABLED and config.debugging.single_training_example:
+        x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
+    else:
+        x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
+
+    if config.debugging.ENABLED and config.debugging.show_montages:
+        visualize(montage(x_train, (10, 10)), "x_train sample")
+        visualize(montage(x_train, (10, 10)), "x_train std sample")
+        visualize(montage(y_train, (10, 10)), "y_train sample")
+
+    model = create_model(config, x_train, y_train)
+    save_architecture(model.to_json(), config)
+
+    fit_model(config, model, x_train, y_train)
+    save_last_weights(config, model)
+
+
 if __name__ == "__main__":
-    train()
+    # train()
     test()
