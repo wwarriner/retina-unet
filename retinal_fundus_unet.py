@@ -11,7 +11,6 @@ devices = config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
 config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
-from tensorflow.python import one_hot
 from tensorflow.python.keras.utils import to_categorical
 
 from lib.config_snake.config import ConfigFile
@@ -23,6 +22,7 @@ from unet import WeightedCategoricalCrossentropy, Unet
 
 # TODO cleanup of imports
 # TODO refactor functions here with functionality in other modules
+# TODO expose random seeds in config
 
 
 def preprocess(images):
@@ -99,7 +99,6 @@ def load_xy(config, test_train):
     y = load_folder(str(y_folder))
     y = stack(y)
     y = y / 255
-    # y = y.astype(np.uint8)
     assert (y == 1).any()
     assert (y == 0).any()
 
@@ -122,7 +121,7 @@ def extract_random_patches(config, x_train, y_train, masks):
 
 
 def extract_structured_patches(config, x_test):
-    patch_shape = config.training.patch_count
+    patch_shape = config.training.unet.input_shape[0:-1]
     return patchify(x_test, patch_shape)
 
 
@@ -197,7 +196,6 @@ def load_model_from_best_weights(config):
 
 def generate_predictions(model, x_train, masks, patch_counts, padding):
     predictions = model.predict(x_train)
-    # predictions = np.argmax(predictions, axis=-1)
     predictions = predictions[..., 1] > 0.5
     predictions = predictions[..., np.newaxis]
     predictions = predictions.astype(np.float)
