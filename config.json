@@ -12,7 +12,7 @@
     "logging": true
   },
   "debugging": {
-    "ENABLED": false,
+    "enabled": false,
     "single_training_example": false,
     "show_montages": true
   },
@@ -32,6 +32,13 @@
         "decay_steps": 10000,
         "decay_rate": 0.99,
         "staircase": true
+      },
+      "reproducibility": {
+        "enabled": true,
+        "python_hash_seed": 314159,
+        "python_random_seed": 314159,
+        "numpy_random_seed": 314159,
+        "tensorflow_random_seed": 314159
       }
     },
     "patch_count": 1000,
