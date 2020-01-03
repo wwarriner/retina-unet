@@ -3,22 +3,19 @@ from pathlib import Path, PurePath
 
 import numpy as np
 from tensorflow import config
-from tensorflow.python.keras.models import model_from_json
-
-from image_preprocess import standardize
 
 devices = config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
 config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
+from tensorflow.python.keras.models import model_from_json
 from tensorflow.python.keras.utils import to_categorical
 
 from lib.config_snake.config import ConfigFile
-
-import image_preprocess as ip
-from image_util import *
-import patch_extract as pe
-from unet import WeightedCategoricalCrossentropy, Unet
+from lib.python_image_utilities.image_preprocess import *
+from lib.python_image_utilities.image_util import *
+from lib.python_image_utilities.patch_extract import *
+from unet import MeanGIoU, WeightedCategoricalCrossentropy, Unet
 
 # TODO refactor functions here with functionality in other modules
 
@@ -179,11 +176,11 @@ def load_xy(config, test_train):
 
 def preprocess(images):
     # 1st dim is stack, 2nd & 3rd are spatial, 4th is channels
-    out = np.array([ip.rgb2gray(image) for image in images])
-    out = ip.rescale(out, out_range=(0, 255)).astype(np.uint8)
-    out = np.array([ip.apply_clahe(image) for image in out])
-    out = np.array([ip.adjust_gamma(image, 1.2) for image in out])
-    out = ip.standardize(out)
+    out = np.array([rgb2gray(image) for image in images])
+    out = rescale(out, out_range=(0, 255)).astype(np.uint8)
+    out = np.array([apply_clahe(image) for image in out])
+    out = np.array([adjust_gamma(image, 1.2) for image in out])
+    out = standardize(out)
     # functions stripped 4th dim, so add back
     out = out[..., np.newaxis]
     return out
@@ -228,12 +225,12 @@ def train():
     TRAIN = "train"
     x_train, y_train = load_xy(config, TRAIN)
     mask = load_mask(config, TRAIN)
-    if config.debugging.ENABLED and config.debugging.single_training_example:
+    if config.debugging.enabled and config.debugging.single_training_example:
         x_train, y_train = extract_one_patch(config, x_train, y_train, mask)
     else:
         x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
 
-    if config.debugging.ENABLED and config.debugging.show_montages:
+    if config.debugging.enabled and config.debugging.show_montages:
         visualize(montage(x_train, (10, 10)), "x_train sample")
         visualize(montage(x_train, (10, 10)), "x_train std sample")
         visualize(montage(y_train, (10, 10)), "y_train sample")

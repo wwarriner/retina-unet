@@ -2,6 +2,7 @@ import os
 import random
 
 import numpy as np
+from skimage.morphology import convex_hull_image
 import tensorflow as tf
 from tensorflow.python.keras.layers import (
     Activation,
@@ -13,7 +14,7 @@ from tensorflow.python.keras.layers import (
     UpSampling2D,
 )
 from tensorflow.python.keras.models import Model
-from tensorflow.keras.initializers import GlorotUniform
+from tensorflow.python.keras.initializers import GlorotUniform
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.optimizers.schedules import (
     PiecewiseConstantDecay,
@@ -44,7 +45,6 @@ class WeightedCategoricalCrossentropy(Loss):
         return weights * categorical_crossentropy(y_true, y_pred)
 
 
-# TODO fix tests
 class Unet:
     def __init__(self, class_count, **kwargs):
 
@@ -102,7 +102,7 @@ class Unet:
 
         r = kwargs["reproducibility"]
         tf_random_seed = None
-        if r["ENABLED"]:
+        if r["enabled"]:
             os.environ["PYTHONHASHSEED"] = str(r["python_hash_seed"])
             os.environ["TF_CUDNN_DETERMINISTIC"] = str(1)
             random.seed(r["python_random_seed"])
