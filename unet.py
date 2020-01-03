@@ -26,7 +26,45 @@ from tensorflow.python.keras import backend as K
 from functools import reduce
 
 
-# TODO implement/test GIoU loss function
+# TODO work on this for segmentation
+class MeanGIoU(Loss):
+    def __init__(self):
+        super().__init__(reduction=losses_utils.ReductionV2.AUTO, name="GeneralizedIoU")
+
+    def call(self, y_true, y_pred):
+        assert y_true.dtype == y_pred.dtype
+        dtype = y_true.dtype
+
+        yt = tf.math.greater(y_true, tf.constant([0.0], dtype=dtype))
+        yp = tf.math.greater(y_pred, tf.constant([0.0], dtype=dtype))
+
+        yi = tf.math.logical_and(yt, yp)
+        yi = tf.transpose(yi)
+        yi = tf.cast(yi, dtype)
+        II = tf.map_fn(tf.math.reduce_sum, yi)
+
+        yu = tf.math.logical_or(yt, yp)
+        yu = tf.transpose(yu)
+        yu = tf.cast(yu, dtype)
+        UU = tf.map_fn(tf.math.reduce_sum, yu)
+
+        ych = tf.map_fn(
+            lambda x: tf.cast(tf.numpy_function(convex_hull_image, [x], dtype), dtype),
+            yu,
+        )
+        CH = tf.math.reduce_sum(ych)
+
+        IOU = II / UU
+        GIOU = IOU - ((CH - UU) / CH)
+        # area of truth
+        # area of prediction
+        # area of intersection
+        # area of union
+        # area of convex hull of union
+        # IoU = AoI / AoU
+        # GIoU = IoU - ((AoCH - AoU) / AoCH)
+        # Loss = 1 - GIoU
+        return tf.reduce_mean(GIOU)
 
 
 class WeightedCategoricalCrossentropy(Loss):
