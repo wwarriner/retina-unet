@@ -79,7 +79,7 @@ def extract_random(images, patch_shape, patch_count, masks=None, auxiliary_image
     if auxiliary_images is None:
         auxiliary_images = repeat(None)
     raw = [
-        pe.generate_random_patch(image, patch_shape, mask, aux)
+        generate_random_patch(image, patch_shape, mask, aux)
         for _ in range(patches_per_image)
         for image, mask, aux in zip(images, masks, auxiliary_images)
     ]
@@ -127,7 +127,7 @@ def get_name(config):
 
 
 def get_out_folder(config):
-    out_folder = PurePath(".") / "out" / get_name(config)
+    out_folder = PurePath(".") / config.paths.out / get_name(config)
     Path(out_folder).mkdir(parents=True, exist_ok=True)
     return out_folder
 
@@ -139,7 +139,7 @@ def get_train_test_subfolder(config, train_test, sub_tag):
 
 def load_mask(config, test_train):
     mask_folder = get_train_test_subfolder(config, test_train, "masks")
-    mask = load_folder(str(mask_folder))
+    mask = load_images(str(mask_folder), ".gif")
     mask = stack(mask)
     return mask / 255
 
@@ -159,13 +159,13 @@ def load_model_from_best_weights(config):
 
 def load_xy(config, test_train):
     x_folder = get_train_test_subfolder(config, test_train, "images")
-    x = load_folder(str(x_folder))
+    x = load_images(str(x_folder), ".tif")
     x = stack(x)
-    x = preprocess(x) / 255
+    x = preprocess(x)
     assert (x != 0).any()
 
     y_folder = get_train_test_subfolder(config, test_train, "groundtruth")
-    y = load_folder(str(y_folder))
+    y = load_images(str(y_folder), ".gif")
     y = stack(y)
     y = y / 255
     assert (y == 1).any()
@@ -205,8 +205,9 @@ def save_predictions(config, predictions):
     save_images(out_folder, name, predictions)
 
 
-def test():
-    config = ConfigFile("config.json")
+def test(config=None):
+    if config is None:
+        config = ConfigFile("config.json")
 
     TEST = "test"
     x_test, y_test = load_xy(config, TEST)
@@ -219,8 +220,9 @@ def test():
     save_predictions(config, predictions)
 
 
-def train():
-    config = ConfigFile("config.json")
+def train(config=None):
+    if config is None:
+        config = ConfigFile("config.json")
 
     TRAIN = "train"
     x_train, y_train = load_xy(config, TRAIN)
@@ -242,6 +244,13 @@ def train():
     save_last_weights(config, model)
 
 
+def display_predictions(view_fn, config=None):
+    if config is None:
+        config = ConfigFile("config.json")
+
+    images = stack(load_images(get_out_folder(config), ".png"))
+    return view_fn(montage(images))
+
+
 if __name__ == "__main__":
-    # train()
-    test()
+    display_predictions(visualize)

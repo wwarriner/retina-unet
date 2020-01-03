@@ -5,7 +5,8 @@
     "test": "test",
     "images": "images",
     "masks": "mask",
-    "groundtruth": "1st_manual"
+    "groundtruth": "1st_manual",
+    "out": "out"
   },
   "general": {
     "name": "test",
