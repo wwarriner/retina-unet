@@ -15,7 +15,7 @@
     "staircase": true
   },
   "reproducibility": {
-    "ENABLED": true,
+    "enabled": true,
     "python_hash_seed": 314159,
     "python_random_seed": 314159,
     "numpy_random_seed": 314159,
