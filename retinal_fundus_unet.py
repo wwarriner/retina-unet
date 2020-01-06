@@ -232,9 +232,9 @@ def train(config=None):
         x_train, y_train = extract_random_patches(config, x_train, y_train, mask)
 
     if config.debugging.enabled and config.debugging.show_montages:
-        visualize(montage(x_train, (10, 10)), "x_train sample")
-        visualize(montage(x_train, (10, 10)), "x_train std sample")
-        visualize(montage(y_train, (10, 10)), "y_train sample")
+        show(montage(x_train, (10, 10)), "x_train sample")
+        show(montage(x_train, (10, 10)), "x_train std sample")
+        show(montage(y_train, (10, 10)), "y_train sample")
 
     model = create_model(config, x_train, y_train)
     save_architecture(model.to_json(), config)
@@ -264,4 +264,5 @@ def display_predictions(view_fn, config=None):
 
 
 if __name__ == "__main__":
-    display_predictions(visualize)
+    test()
+    display_predictions(show)
