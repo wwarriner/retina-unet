@@ -12,7 +12,6 @@ from tensorflow.python.keras.models import model_from_json
 from tensorflow.python.keras.utils import to_categorical
 
 from lib.config_snake.config import ConfigFile
-from lib.python_image_utilities.image_preprocess import *
 from lib.python_image_utilities.image_util import *
 from lib.python_image_utilities.patch_extract import *
 from unet import WeightedCategoricalCrossentropy, Unet
@@ -178,7 +177,7 @@ def preprocess(images):
     # 1st dim is stack, 2nd & 3rd are spatial, 4th is channels
     out = np.array([rgb2gray(image) for image in images])
     out = rescale(out, out_range=(0, 255)).astype(np.uint8)
-    out = np.array([apply_clahe(image) for image in out])
+    out = np.array([clahe(image) for image in out])
     out = np.array([adjust_gamma(image, 1.2) for image in out])
     out = standardize(out)
     # functions stripped 4th dim, so add back
@@ -256,7 +255,7 @@ def display_predictions(view_fn, config=None):
     )
     overlay_montage = overlay(
         montage(predicted_images),
-        montage(ground_truth_images).squeeze(),
+        montage(ground_truth_images),
         [0.0, 1.0, 0.0],
         0.5,
         0.5,
