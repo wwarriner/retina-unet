@@ -243,7 +243,7 @@ def train(config=None):
     save_last_weights(config, model)
 
 
-def display_predictions(view_fn, config=None):
+def display_predictions(view_fn, config=None, color=[1.0, 1.0, 0.0]):
     if config is None:
         config = ConfigFile("config.json")
 
@@ -254,11 +254,7 @@ def display_predictions(view_fn, config=None):
         load_images(get_train_test_subfolder(config, "test", "groundtruth"), ".gif")
     )
     overlay_montage = overlay(
-        montage(predicted_images),
-        montage(ground_truth_images),
-        [0.0, 1.0, 0.0],
-        0.5,
-        0.5,
+        montage(predicted_images), montage(ground_truth_images), color, 0.5, 0.5
     )
     return view_fn(overlay_montage)
 
