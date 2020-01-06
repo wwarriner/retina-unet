@@ -20,7 +20,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+lib/*
 lib64/
 parts/
 sdist/
@@ -154,3 +154,4 @@ $RECYCLE.BIN/
 /*/settings.json
 .vscode/launch.json
 example_result.png
+!lib/__init__.py
