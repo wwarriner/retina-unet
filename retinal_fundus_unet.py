@@ -15,7 +15,7 @@ from lib.config_snake.config import ConfigFile
 from lib.python_image_utilities.image_preprocess import *
 from lib.python_image_utilities.image_util import *
 from lib.python_image_utilities.patch_extract import *
-from unet import MeanGIoU, WeightedCategoricalCrossentropy, Unet
+from unet import WeightedCategoricalCrossentropy, Unet
 
 # TODO refactor functions here with functionality in other modules
 
@@ -248,8 +248,20 @@ def display_predictions(view_fn, config=None):
     if config is None:
         config = ConfigFile("config.json")
 
-    images = stack(load_images(get_out_folder(config), ".png"))
-    return view_fn(montage(images))
+    predicted_images = stack(load_images(get_out_folder(config), ".png"))
+    # predicted_images = np.stack([rgb2gray(image) for image in predicted_images])
+    # predicted_images = predicted_images[..., np.newaxis]
+    ground_truth_images = stack(
+        load_images(get_train_test_subfolder(config, "test", "groundtruth"), ".gif")
+    )
+    overlay_montage = overlay(
+        montage(predicted_images),
+        montage(ground_truth_images).squeeze(),
+        [0.0, 1.0, 0.0],
+        0.5,
+        0.5,
+    )
+    return view_fn(overlay_montage)
 
 
 if __name__ == "__main__":
