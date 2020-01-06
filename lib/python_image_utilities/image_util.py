@@ -27,13 +27,26 @@ def adjust_gamma(image, gamma=1.0):
 
 def clahe(image):
     """Applies CLAHE equalization to input image."""
+    is_float = np.issubdtype(image.dtype, np.floating)
+    if is_float:
+        image = float_to_uint8(image)
+
+    is_rgb = image.shape[-1] == 3
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2, 2))
-    return clahe.apply(image.astype(np.uint8))
+    if is_rgb:
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+        image[..., 0] = clahe.apply(image[..., 0])
+        image = cv2.cvtColor(image, cv2.COLOR_LAB2RGB)
+    else:
+        image = clahe.apply(image)
+
+    if is_float:
+        image = uint8_to_float(image)
+    return image
 
 
-def float_to_uint8(float_image, float_range=(0.0, 1.0)):
+def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
     uint8_image = rescale(float_image, out_range=(0.0, 255.0), in_range=float_range)
-    uint8_image = np.round(uint8_image)
     return uint8_image.astype(np.uint8)
 
 
@@ -71,13 +84,18 @@ def get_center(shape):
     return [floor(x / 2) for x in shape]
 
 
+def gray2rgb(gray_image):
+    return cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
+
+
+def lab2rgb(lab_image):
+    return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
+
+
 def load(path):
-    if PurePath(path).suffix in (".gif"):
-        image = Image.open(path)
-        image = np.asarray(image)
-    else:
-        image = cv2.imread(path)
-    return image
+    """Returns image in RGB or grayscale format."""
+    image = Image.open(path)
+    return np.asarray(image)
 
 
 def load_images(folder, ext):
@@ -90,10 +108,6 @@ def mask_images(images, masks):
     threshold = (masks.max() - masks.min()) / 2.0
     masked[masks <= threshold] = 0
     return masked
-
-
-def gray2rgb(gray_image):
-    return cv2.cvtColor(gray_image, cv2.COLOR_GRAY2RGB)
 
 
 def montage(images, shape=None, mode="sequential", repeat=False, start=0):
@@ -134,14 +148,14 @@ def montage(images, shape=None, mode="sequential", repeat=False, start=0):
 
 
 # TODO fix issue with different channel counts, i.e. gray to rgb for both inputs
-def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0):
+def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0, clip=False):
     """Applies a color to grayscale foreground and blends with background.
     Background may be RGB or grayscale. Foreground and background may be float
-    or uint8. Output is RGB with the same dtype as ."""
-    assert background.dtype in (np.uint8, np.float)
+    or uint8. Output is RGB with the same dtype as background."""
+    assert np.issubdtype(background.dtype, np.floating) or background.dtype == np.uint8
     assert background.shape[-1] in (1, 3)
-    assert foreground.dtype in (np.uint8, np.float)
-    assert foreground.shape[-1] == 1 or foreground.ndim == background.ndim - 1
+    assert np.issubdtype(foreground.dtype, np.floating) or foreground.dtype == np.uint8
+    assert foreground.shape[-1] == 1
     assert len(color) == 3
 
     if background.dtype == np.uint8:
@@ -151,9 +165,14 @@ def overlay(background, foreground, color, alpha=0.1, beta=1.0, gamma=0.0):
 
     if foreground.dtype == np.uint8:
         foreground = uint8_to_float(foreground)
+    if foreground.ndim == background.ndim:
+        foreground = np.squeeze(foreground, axis=-1)
 
     foreground = np.stack([c * foreground for c in color], axis=-1)
-    return cv2.addWeighted(foreground, alpha, background, beta, gamma)
+    out = cv2.addWeighted(foreground, alpha, background, beta, gamma)
+    if background.dtype == np.uint8:
+        out = float_to_uint8(out, clip=clip)
+    return out
 
 
 def patchify(images, patch_shape, *args, **kwargs):
@@ -188,7 +207,9 @@ def patchify(images, patch_shape, *args, **kwargs):
     return patches, patch_counts, out_padding
 
 
-def rescale(image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf"))):
+def rescale(
+    image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf")), clip=False
+):
     """Rescales image from in_range to out_range while retaining input dtype."""
     lo = in_range[0]
     if lo == float("-inf") or isnan(lo):
@@ -206,6 +227,8 @@ def rescale(image, out_range=(0.0, 1.0), in_range=(float("-inf"), float("+inf"))
     out = med * (out_range[1] - out_range[0]) + out_range[0]
     if np.issubdtype(image.dtype, np.integer):
         out = np.round(out)
+    if clip:
+        out = np.clip(out, out_range[0], out_range[1])
     return out.astype(image.dtype)
 
 
@@ -213,8 +236,13 @@ def rgb2gray(rgb_image):
     return cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
 
 
+def rgb2lab(rgb_image):
+    return cv2.cvtColor(rgb_image, cv2.COLOR_LAB2RGB)
+
+
 def save(path, image):
-    cv2.imwrite(path, image)
+    im = Image.fromarray(image)
+    im.save(path)
 
 
 def save_images(path, name, images):
@@ -265,10 +293,10 @@ def standardize(images):
     return standardized
 
 
-def uint8_to_float(uint8_image, float_range=(0.0, 1.0)):
-    float_image = uint8_image / 255.0
-    float_image = rescale(float_image, out_range=float_range)
-    return float_image
+def uint8_to_float(uint8_image, float_range=(0.0, 1.0), clip=False):
+    return rescale(
+        uint8_image.astype(np.float), in_range=(0.0, 255.0), out_range=float_range
+    )
 
 
 def unpatchify(patches, patch_counts, padding):
@@ -294,17 +322,16 @@ def unpatchify(patches, patch_counts, padding):
     return images
 
 
-def visualize(image, tag="UNLABELED_WINDOW", is_opencv=True):
+def show(image, tag="UNLABELED_WINDOW"):
     assert image.ndim in (2, 3)
     if image.ndim == 3:
         assert image.shape[-1] in (1, 3)
 
     cv2.namedWindow(tag, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(tag, image.shape[0:2][::-1])
-    if is_opencv and image.ndim == 3 and image.shape[-1] == 3:
-        cv2.imshow(tag, np.flip(image, axis=2))
-    else:
-        cv2.imshow(tag, image)
+    if image.shape[-1] == 3:
+        image = image[..., ::-1]
+    cv2.imshow(tag, image)
     cv2.waitKey(1)
 
 
