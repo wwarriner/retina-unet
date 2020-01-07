@@ -1,12 +1,174 @@
 import abc
 import json
 from pathlib import Path, PurePath
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Union
 
 import jsonschema
 
 
+class ConfigFile:
+    """A self-aware abstraction for JSON configuration files. The abstraction
+    can be assigned any number of on-change callbacks, which can be used for
+    features like autosaving when changed. By default, overwriting is turned
+    off for safety. Fields are accessible both dict-style and by dot notation. It is
+    possible to use arrays in the configuration, but they may only be accessed
+    list-style, and not by dot notation.
+
+    Example usages:
+
+    Access...
+    config = ConfigFile("config.json")
+    dot_value = config.dict.value
+    VALUE_KEY = "value"
+    dict_value = config["dict"][VALUE_KEY]
+    LIST_INDEX = 0
+    list_value = config.list[LIST_INDEX]
+
+    Autosaving...
+    config.on_change_callbacks["autosave"] = config.AUTOSAVE_CALLBACK
+    config.overwrite_on()
+    config.dict.value = "new_value"
+    """
+
+    AUTOSAVE_CALLBACK = lambda x: x.save()
+
+    # Raises OSError
+    def __init__(self, config_path=None, schema_path=None):
+        head = ConfigDict(self, {})
+        schema = None
+        if schema_path is not None:
+            with open(str(schema_path), mode="r") as f:
+                schema = json.load(f)
+        if config_path is not None:
+            with open(str(config_path), mode="r") as f:
+                data = json.load(f)
+                if schema is not None:
+                    self._validate(data, schema)
+            head = _to_config(self, data)
+        self._head = head
+        self._path = config_path
+        self._schema = schema
+        self._allow_overwrite = False
+        self._on_change_callbacks = {}
+
+    def __contains__(self, key):
+        return self._head.__contains__(key)
+
+    def __delitem__(self, key):
+        del self._head[key]
+
+    def __eq__(self, other):
+        if isinstance(other, ConfigFile):
+            return self._head == other._head
+        if isinstance(other, (ConfigItem, dict, list)):
+            return self._head == other
+        else:
+            return False
+
+    def __getattr__(self, key):
+        if self.__contains__(key):
+            return self.__getitem__(key)
+        else:
+            raise AttributeError()
+
+    def __getitem__(self, key):
+        return self._head[key]
+
+    def __setattr__(self, key, value):
+        # Ignoring member variables defined in __init__()
+        if key in (
+            "_head",
+            "_path",
+            "_allow_overwrite",
+            "_schema",
+            "_on_change_callbacks",
+            "on_change_callbacks",
+        ):
+            super().__setattr__(key, value)
+        else:
+            self.__setitem__(key, value)
+
+    def __iter__(self):
+        return iter(self._head)
+
+    def __len__(self):
+        return len(self._head)
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __setitem__(self, key, value):
+        self._head[key] = _to_config(self, value)
+
+    def __str__(self):
+        return self.to_json().__str__()
+
+    @property
+    def overwrite(self):
+        return self._allow_overwrite
+
+    @overwrite.setter
+    def overwrite(self, value: bool):
+        assert value in (False, True)
+        self._allow_overwrite = value
+
+    @property
+    def path(self):
+        return PurePath(self._path)
+
+    @path.setter
+    def path(self, value: Union[str, PurePath, Path]):
+        assert isinstance(value, (str, PurePath, Path))
+        self._path = value
+
+    @property
+    def on_change_callbacks(self):
+        return self._on_change_callbacks
+
+    @on_change_callbacks.setter
+    def on_change_callbacks(self, value: Dict[Any, Callable[["ConfigFile"], None]]):
+        self._on_change_callbacks = value
+
+    def clear(self):
+        self._head.clear()
+        self._has_changed()
+
+    def overwrite_off(self):
+        self._allow_overwrite = False
+
+    def overwrite_on(self):
+        self._allow_overwrite = True
+
+    def save(self):
+        path = self._path
+        if path is None:
+            return
+        if self._allow_overwrite or not Path(path).is_file():
+            with open(str(path), mode="w") as f:
+                json.dump(self.to_json(), f)
+
+    def to_json(self):
+        """Returns an object conformant with built-in json library."""
+        return _from_config(self._head)
+
+    def _has_changed(self):
+        """Must be called by children when their children change."""
+        if self._schema is not None:
+            self._validate(self.to_json(), self._schema)
+        for callback in self.on_change_callbacks.values():
+            callback(self)
+
+    @staticmethod
+    def _validate(json, schema):
+        jsonschema.validate(json, schema)
+
+
 class ConfigItem(abc.ABC):
+    """Base class for children of ConfigFile."""
+
     def __init__(self, parent, children):
         self._children = children
         self._parent = parent
@@ -213,132 +375,3 @@ def _from_config(value):
         return value.to_json()
     else:
         return value
-
-
-class ConfigFile:
-    AUTOSAVE_CALLBACK = lambda x: x.save()
-
-    # Raises OSError
-    def __init__(self, config_path=None, schema_path=None):
-        head = ConfigDict(self, {})
-        schema = None
-        if schema_path is not None:
-            with open(str(schema_path), mode="r") as f:
-                schema = json.load(f)
-        if config_path is not None:
-            with open(str(config_path), mode="r") as f:
-                data = json.load(f)
-                if schema is not None:
-                    self._validate(data, schema)
-            head = _to_config(self, data)
-        self._head = head
-        self._path = config_path
-        self._schema = schema
-        self._allow_overwrite = False
-        self._on_change_callbacks = {}
-
-    def __contains__(self, key):
-        return self._head.__contains__(key)
-
-    def __delitem__(self, key):
-        del self._head[key]
-
-    def __eq__(self, other):
-        if isinstance(other, ConfigFile):
-            return self._head == other._head
-        if isinstance(other, (ConfigItem, dict, list)):
-            return self._head == other
-        else:
-            return False
-
-    def __getattr__(self, key):
-        if self.__contains__(key):
-            return self.__getitem__(key)
-        else:
-            raise AttributeError()
-
-    def __getitem__(self, key):
-        return self._head[key]
-
-    def __setattr__(self, key, value):
-        if key in (
-            "_head",
-            "_path",
-            "_allow_overwrite",
-            "_schema",
-            "_on_change_callbacks",
-            "on_change_callbacks",
-        ):
-            super().__setattr__(key, value)
-        else:
-            self.__setitem__(key, value)
-
-    def __iter__(self):
-        return iter(self._head)
-
-    def __len__(self):
-        return len(self._head)
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __setitem__(self, key, value):
-        self._head[key] = _to_config(self, value)
-
-    def __str__(self):
-        return self.to_json().__str__()
-
-    @property
-    def on_change_callbacks(self):
-        return self._on_change_callbacks
-
-    @on_change_callbacks.setter
-    def on_change_callbacks(self, value: Dict[Any, Callable[["ConfigFile"], None]]):
-        self._on_change_callbacks = value
-
-    def clear(self):
-        self._head.clear()
-        self._has_changed()
-
-    def get_path(self):
-        return PurePath(self._path)
-
-    def get_overwrite(self):
-        return self._allow_overwrite
-
-    def set_overwrite(self, overwrite):
-        assert overwrite in (False, True)
-        self._allow_overwrite = overwrite
-
-    def overwrite_off(self):
-        self._allow_overwrite = False
-
-    def overwrite_on(self):
-        self._allow_overwrite = True
-
-    def save(self):
-        path = self._path
-        if path is None:
-            return
-        if self._allow_overwrite or not Path(path).is_file():
-            with open(str(path), mode="w") as f:
-                json.dump(self.to_json(), f)
-
-    def set_path(self, path):
-        self._path = PurePath(path)
-
-    def to_json(self):
-        return _from_config(self._head)
-
-    def _has_changed(self):
-        if self._schema is not None:
-            self._validate(self.to_json(), self._schema)
-        for callback in self.on_change_callbacks.values():
-            callback(self)
-
-    @staticmethod
-    def _validate(json, schema):
-        jsonschema.validate(json, schema)
