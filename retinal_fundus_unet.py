@@ -2,11 +2,11 @@ from itertools import repeat
 from pathlib import Path, PurePath
 
 import numpy as np
-from tensorflow import config
+from tensorflow import tf_config
 
-devices = config.experimental.list_physical_devices("GPU")
+devices = tf_config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
-config.experimental.set_memory_growth(devices[0], True)
+tf_config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.models import model_from_json
 from tensorflow.python.keras.utils import to_categorical
