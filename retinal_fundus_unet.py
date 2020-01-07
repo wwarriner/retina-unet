@@ -2,7 +2,7 @@ from itertools import repeat
 from pathlib import Path, PurePath
 
 import numpy as np
-from tensorflow import tf_config
+from tensorflow import config as tf_config
 
 devices = tf_config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
