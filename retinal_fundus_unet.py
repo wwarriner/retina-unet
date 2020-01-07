@@ -17,6 +17,7 @@ from lib.python_image_utilities.patch_extract import *
 from unet import WeightedCategoricalCrossentropy, Unet
 
 # TODO refactor functions here with functionality in other modules
+# TODO refactor unet model to take full advantage of v2.0 keras API
 
 
 def compute_class_count(y_train):
