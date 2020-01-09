@@ -79,9 +79,11 @@ class ConfigFile:
         if key in (
             "_head",
             "_path",
-            "_allow_overwrite",
             "_schema",
+            "_allow_overwrite",
             "_on_change_callbacks",
+            "overwrite",
+            "path",
             "on_change_callbacks",
         ):
             super().__setattr__(key, value)

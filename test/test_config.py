@@ -55,7 +55,7 @@ class TestConfigFile(unittest.TestCase):
             self.assertTrue(True)
 
     def test_CF_get_path(self):
-        path = self.init_config.get_path()
+        path = self.init_config.path
         self.assertEqual(path, self.init_path)
 
     def test_CF_len(self):
@@ -76,7 +76,7 @@ class TestConfigFile(unittest.TestCase):
     def test_CF_overwrite_off(self):
         assert not Path(self.save_path).is_file()
         try:
-            self.init_config.set_path(self.save_path)
+            self.init_config.path = self.save_path
             self.init_config.overwrite_off()
             self.init_config.save()
             self.init_config[self.new_key] = self.new_data
@@ -91,7 +91,7 @@ class TestConfigFile(unittest.TestCase):
     def test_CF_overwrite_on(self):
         assert not Path(self.save_path).is_file()
         try:
-            self.init_config.set_path(self.save_path)
+            self.init_config.path = self.save_path
             self.init_config.overwrite_on()
             self.init_config.save()
             self.init_config[self.new_key] = self.new_data
@@ -106,10 +106,10 @@ class TestConfigFile(unittest.TestCase):
     def test_CF_overwrite_get_set(self):
         assert not Path(self.save_path).is_file()
         try:
-            self.assertFalse(self.init_config.get_overwrite())
-            self.init_config.set_path(self.save_path)
-            self.init_config.set_overwrite(True)
-            self.assertTrue(self.init_config.get_overwrite())
+            self.assertFalse(self.init_config.overwrite)
+            self.init_config.path = self.save_path
+            self.init_config.overwrite = True
+            self.assertTrue(self.init_config.overwrite)
             self.init_config.save()
             self.init_config[self.new_key] = self.new_data
             self.init_config.save()
@@ -126,7 +126,7 @@ class TestConfigFile(unittest.TestCase):
     def test_CF_save(self):
         assert not Path(self.save_path).is_file()
         try:
-            self.init_config.set_path(self.save_path)
+            self.init_config.path = self.save_path
             self.init_config.save()
             save_config = ConfigFile(self.save_path)
             self.assertEqual(save_config, self.init_config)
@@ -153,7 +153,7 @@ class TestConfigFile(unittest.TestCase):
 
         assert not Path(self.save_path).is_file()
         try:
-            schema_config.set_path(self.save_path)
+            schema_config.path = self.save_path
             schema_config.overwrite_off()
             schema_config.save()
             schema_config[self.new_key] = self.new_data
@@ -169,8 +169,8 @@ class TestConfigFile(unittest.TestCase):
         self.assertEqual(self.init_config.to_json(), self.new_json)
 
     def test_CF_set_path(self):
-        self.init_config.set_path(self.save_path)
-        path = self.init_config.get_path()
+        self.init_config.path = self.save_path
+        path = self.init_config.path
         self.assertEqual(path, self.save_path)
 
     def test_CF_to_json(self):
