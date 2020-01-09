@@ -192,6 +192,19 @@ def save_architecture(json_str, config):
         f.write(json_str)
 
 
+def save_config(config):
+    old_path = config.path
+    old_overwrite = config.overwrite
+    new_path = get_out_folder(config) / (get_name(config) + "_config.json")
+    try:
+        config.path = new_path
+        config.overwrite = True
+        config.save()
+    finally:
+        config.overwrite = old_overwrite
+        config.path = old_path
+
+
 def save_last_weights(config, model):
     name = get_name(config)
     out_folder = get_out_folder(config)
@@ -239,6 +252,7 @@ def train(config=None):
 
     model = create_model(config, x_train, y_train)
     save_architecture(model.to_json(), config)
+    save_config(config)
 
     fit_model(config, model, x_train, y_train)
     save_last_weights(config, model)
@@ -261,5 +275,5 @@ def display_predictions(view_fn, config=None, color=[1.0, 1.0, 0.0]):
 
 
 if __name__ == "__main__":
-    test()
-    display_predictions(show)
+    train()
+    #display_predictions(show)
