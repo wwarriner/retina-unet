@@ -2,11 +2,13 @@ from itertools import chain, cycle, islice
 from math import ceil, floor, isinf, isnan, log10
 from pathlib import PurePath
 from random import shuffle
+from typing import List, Tuple
 
 import cv2
 import noise
 import numpy as np
 from PIL import Image
+import scipy.stats
 
 import file_utils
 
@@ -26,7 +28,7 @@ def adjust_gamma(image, gamma=1.0):
     return out
 
 
-def clahe(image):
+def clahe(image, tile_size=(2, 2)):
     """Applies CLAHE equalization to input image. Works on both float and uint8
     images. Works on color images by converting to Lab space and treating the L
     channel as grayscale.
@@ -36,7 +38,7 @@ def clahe(image):
         image = float_to_uint8(image)
 
     is_rgb = image.shape[-1] == 3
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(2, 2))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=tile_size)
     if is_rgb:
         image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
         image[..., 0] = clahe.apply(image[..., 0])
@@ -47,6 +49,39 @@ def clahe(image):
     if is_float:
         image = uint8_to_float(image)
     return image
+
+
+def consensus(image_stack, threshold="majority", tie_breaker="min"):
+    """Builds a consensus label image from a stack of label images. If input is
+    NHW, output is 1HW. Input stack must have unsigned integer type or bool
+    type. Output has the same type. If threshold is an integer, it is used as
+    the number of counts to reach consensus. If it is a float, it is used as a
+    fraction of the number of counts. If it is a string, it must be "majority",
+    and returns the class label with the largest count in that pixel. If the
+    input stack has more than 2 classes, threshold must be "majority". If there
+    is a tie or consensus is not reached, the tie-breaker strategy is used. The
+    tie-breaker strategy may be "min" or "max". Tie breaking is only relevant
+    for majority threshold.
+    """
+    assert image_stack.dtype == np.bool or np.issubdtype(image_stack.dtype, np.integer)
+    image_stack = image_stack.copy().astype(np.uint8)
+    if np.unique(image_stack).size > 2:
+        assert threshold == "majority"
+
+    if isinstance(threshold, float):
+        assert 0.0 <= threshold <= 1.0
+
+    if threshold == "majority":
+        if tie_breaker == "max":
+            image_stack = np.iinfo(image_stack.dtype).max - image_stack
+        mode = scipy.stats.mode(image_stack)[0]
+        if tie_breaker == "max":
+            mode = np.iinfo(image_stack.dtype).max - mode
+        return mode
+    else:
+        if isinstance(threshold, float):
+            threshold = round(threshold * image_stack.shape[0])
+        return image_stack.sum(axis=0) >= threshold
 
 
 def float_to_uint8(float_image, float_range=(0.0, 1.0), clip=False):
@@ -111,7 +146,7 @@ def lab2rgb(lab_image):
     return cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
 
 
-def load(path):
+def load(path, force_rgb=False):
     """Loads an image from the supplied path in grayscale or RGB depending on
     the source.
     """
@@ -121,15 +156,43 @@ def load(path):
     else:
         image = Image.open(path)
         image = np.array(image)
+
+    if image.ndim == 2:
+        image = image[..., np.newaxis]
+
+    # convert redundant rgb to grayscale
+    if image.shape[2] == 3:
+        g_redundant = (image[..., 0] == image[..., 1]).all()
+        b_redundant = (image[..., 0] == image[..., 2]).all()
+        if (g_redundant and b_redundant) and not force_rgb:
+            image = image[..., 0]
+            image = image[..., np.newaxis]
+
+    if image.shape[2] == 1 and force_rgb:
+        image = np.repeat(image, 3, axis=2)
+
+    assert image.ndim == 3
+    assert image.shape[2] in (1, 3)
     return image
 
 
-def load_images(folder, ext=None):
+def load_images(folder, ext=None) -> Tuple[List[np.array], List[PurePath]]:
     """Loads a folder of images. If an extension is supplied, only images with
-    that extension will be loaded.
+    that extension will be loaded. Also returns the filenames of every loaded
+    image.
     """
     image_files = file_utils.get_contents(folder, ext)
-    return [load(str(image_file)) for image_file in image_files]
+    images = []
+    names = []
+    for image_file in image_files:
+        try:
+            image = load(str(image_file))
+        except Exception as e:
+            continue
+        images.append(image)
+        names.append(image_file)
+
+    return images, names
 
 
 def mask_images(images, masks):
@@ -147,7 +210,13 @@ def mask_images(images, masks):
 
 
 def montage(
-    images, shape=None, mode="sequential", repeat=False, start=0, maximum_images=36
+    images,
+    shape=None,
+    mode="sequential",
+    repeat=False,
+    start=0,
+    maximum_images=36,
+    fill_value=0,
 ):
     """Generates a montage image from an image stack.
 
@@ -200,7 +269,7 @@ def montage(
     stop = int(np.array(shape).prod() + start)
     iterator = islice(iterator, start, stop)
 
-    montage = np.stack([_get_image_or_blank(images, i) for i in iterator])
+    montage = np.stack([_get_image_or_blank(images, i, fill_value) for i in iterator])
     montage = montage.reshape((*shape, *images.shape[1:]))
 
     a, b = _deinterleave(list(range(0, montage.ndim - 1)))
@@ -248,7 +317,7 @@ def overlay(background, foreground, color, alpha=0.5, beta=0.5, gamma=0.0, clip=
     return out
 
 
-def patchify(images, patch_shape, *args, **kwargs):
+def patchify(image_stack, patch_shape, offset=(0, 0), *args, **kwargs):
     """Transforms an image stack into a new stack made of tiled patches from
     images of the original stack. The size of the patches is determined by
     patch_shape. If patch_shape does not evenly divide the image shape, the
@@ -262,22 +331,53 @@ def patchify(images, patch_shape, *args, **kwargs):
     Returns a tuple consisting of an image stack of patches, the number of
     patches in each dimension, and the padding used. The latter two values are
     used for unpatching.
-    """
-    assert images.ndim in (3, 4)
-    if images.ndim == 3:
-        images = images[np.newaxis, ...]
 
-    out_padding = patch_shape - np.remainder(images.shape[1:-1], patch_shape)
-    padding = np.append(out_padding, 0)
-    padding = np.insert(padding, 0, 0)
-    pre_pad = np.zeros((images.ndim), dtype=np.uint32)
-    padding = list(zip(pre_pad, padding))
-    padded = np.pad(images, padding, *args, **kwargs)
+    Inputs:
+
+    image_stack: Stack of images of shape NHW or NHWC. Assumed to have 2D
+    images.
+
+    patch_shape: Spatial shape of patches. All channel information is retained.
+    If patch shape is size M by N, then the resulting stack of patches will have
+    N * ceil(X/M) * ceil(Y/N) images. Every ceil(X/M) * ceil(Y/N) patches in the
+    stack belong to a single image. Patches are sampled along X first, then Y.
+    If M divides X and N divides Y, then a non-zero offset will change the
+    number of patches.
+
+    offset: Offset is the spatial location of the lower-right corner of the
+    top-left patch relative to the image origin. Because the patch boundaries
+    are periodic, any value greater than patch_shape in any dimension is reduced
+    module patch_shape. The value of any pixels outside the image are assigned
+    according to arguments for np.pad().
+    """
+    assert image_stack.ndim in (3, 4)
+    if image_stack.ndim == 3:
+        image_stack = image_stack[np.newaxis, ...]
+
+    assert len(patch_shape) == 2
+    assert len(offset) == 2
+
+    offset = [o % p for o, p in zip(offset, patch_shape)]
+
+    # determine pre padding
+    pre_padding = [((p - o) % p) for o, p in zip(offset, patch_shape)]
+    pre_padding = np.append(pre_padding, 0)
+    pre_padding = np.insert(pre_padding, 0, 0)
+    # compute post padding from whatever is left
+    pre_image_shape = [
+        s + pre for s, pre in zip(image_stack.shape[1:-1], pre_padding[1:-1])
+    ]
+    post_padding = patch_shape - np.remainder(pre_image_shape, patch_shape)
+    post_padding = np.append(post_padding, 0)
+    post_padding = np.insert(post_padding, 0, 0)
+    padding = list(zip(pre_padding, post_padding))
+    padded = np.pad(image_stack, padding, *args, **kwargs)
+    out_padding = padding[1:-1]
 
     patch_shape = np.array(patch_shape)
     patch_counts = np.array([x // y for x, y in zip(padded.shape[1:-1], patch_shape)])
     patches_shape = _interleave(patch_counts, patch_shape)
-    patches_shape = np.append(patches_shape, images.shape[-1])
+    patches_shape = np.append(patches_shape, image_stack.shape[-1])
     patches_shape = np.insert(patches_shape, 0, -1)
     patches = padded.reshape(patches_shape)
 
@@ -286,7 +386,7 @@ def patchify(images, patch_shape, *args, **kwargs):
     dim_order = np.insert(dim_order, 0, 0)
     patches = patches.transpose(dim_order)
 
-    stacked_shape = (-1, *patch_shape, images.shape[-1])
+    stacked_shape = (-1, *patch_shape, image_stack.shape[-1])
     patches = patches.reshape(stacked_shape)
 
     return patches, patch_counts, out_padding
@@ -308,7 +408,10 @@ def rescale(
 
     assert not isinf(lo) and not isnan(lo)
     assert not isinf(hi) and not isnan(hi)
-    assert lo < hi
+    assert lo <= hi
+
+    if lo == hi:
+        return image
 
     med = (image - lo) / (hi - lo)
     out = med * (out_range[1] - out_range[0]) + out_range[0]
@@ -317,6 +420,39 @@ def rescale(
     if clip:
         out = np.clip(out, out_range[0], out_range[1])
     return out.astype(image.dtype)
+
+
+def resize(image, method="area", size=None, scale=1.0):
+    METHODS = {
+        "nearest": cv2.INTER_NEAREST,
+        "linear": cv2.INTER_LINEAR,
+        "area": cv2.INTER_AREA,
+        "cubic": cv2.INTER_CUBIC,
+        "lanczos": cv2.INTER_LANCZOS4,
+    }
+    assert method in METHODS
+
+    if size is None:
+        if isinstance(scale, float):
+            scale = (scale, scale)
+        assert isinstance(scale, tuple)
+        assert len(scale) == 2
+        assert isinstance(scale[0], float)
+        assert isinstance(scale[1], float)
+
+        out = cv2.resize(image, (0, 0), None, scale[0], scale[1], METHODS[method])
+    elif scale is None:
+        assert isinstance(size, tuple)
+        assert len(size) == 2
+        assert isinstance(size[0], int)
+        assert isinstance(size[1], int)
+
+        out = cv2.resize(image, size)
+    elif scale is None and size is None:
+        assert False
+    else:
+        assert False
+    return out
 
 
 def rgb2gray(rgb_image):
@@ -334,43 +470,29 @@ def rgb2lab(rgb_image):
 def save(path, image):
     """Saves an image to disk at the location specified by path.
     """
+    if np.issubdtype(image.dtype, np.floating):
+        image = float_to_uint8(image)
     if image.shape[-1] == 1:
         image = image.squeeze(axis=-1)
     im = Image.fromarray(image)
-    im.save(path)
+    im.save(str(path))
 
 
-def save_images(path, name, images, delimiter="_"):
+def save_images(paths, image_stack):
     """Saves an image stack to disk as individual images using save() with index
     appended to the supplied file name, joined by delimiter.
 
-    path is an existing folder on disk.
-    name is the desired file name.
-    images is the image stack.
+    paths is the file paths for images to be written.
+
+    images is a Numpy array whose shape is of the form (NHWC) where N is the
+    number of images, HW are spatial dimensions, and C are the channels. N may
+    be any positive number, H and W may be any positive numbers, and C must be 1
+    or 3.
     """
-
-    assert images.ndim in (3, 4)
-    if images.ndim == 3:
-        images = images[np.newaxis, ...]
-
-    ext = PurePath(name).suffix
-    base = PurePath(name).stem
-    count = images.shape[0]
-    if count <= 1:
-        digits = 0
-    else:
-        digits = ceil(log10(count - 1)) - 1
-
-    form = "{base:s}{delimiter:s}{number:0{digits}d}{ext:s}"
-    if count == 1:
-        save(str(PurePath(path) / name), images[0])
-    else:
-        for i, image in enumerate(images):
-            full_name = form.format(
-                base=base, delimiter=delimiter, number=i, digits=digits, ext=ext
-            )
-            image_path = PurePath(path) / full_name
-            save(str(image_path), image)
+    assert image_stack.ndim == 4
+    assert len(paths) == len(image_stack)
+    for path, image in zip(paths, image_stack):
+        save(path, image)
 
 
 def stack(images):
@@ -406,9 +528,9 @@ def uint8_to_float(uint8_image, float_range=(0.0, 1.0), clip=False):
 
 
 def unpatchify(patches, patch_counts, padding):
-    """Inverse of patchify(). Transforms an image stack of patches back to their
-    original images. Requires the patch_counts and padding returned by
-    patchify().
+    """Inverse of patchify(). Transforms an image stack of patches produced
+    using patchify() back into an image stack of the same shape as the original
+    images. Requires the patch_count and padding returned by patchify().
     """
     chunk_len = np.array(patch_counts).prod()
     base_shape = np.array(patch_counts) * np.array(patches.shape[1:-1])
@@ -422,8 +544,15 @@ def unpatchify(patches, patch_counts, padding):
         chunk = np.transpose(chunk, (0, 2, 1, 3, 4))
         images.append(np.reshape(chunk, image_shape))
     images = np.stack(images)
-    space_shape = base_shape - padding
-    slices = [slice(0, x) for x in space_shape]
+    padding = list(zip(*padding))
+    pre_padding = padding[0]
+    post_padding = padding[1]
+    space_shape = [
+        base - pre - post
+        for base, pre, post in zip(base_shape, pre_padding, post_padding)
+    ]
+    # space_shape = base_shape - padding
+    slices = [slice(pre, pre + x) for pre, x in zip(pre_padding, space_shape)]
     slices.append(slice(None))
     slices.insert(0, slice(None))
     images = images[tuple(slices)]
@@ -453,11 +582,11 @@ def _deinterleave(c):
     return a, b
 
 
-def _get_image_or_blank(images, index):
+def _get_image_or_blank(images, index, fill_value=0):
     try:
         return images[index]
     except Exception as e:
-        return np.zeros(images.shape[1:], dtype=images.dtype)
+        return np.zeros(images.shape[1:], dtype=images.dtype) + fill_value
 
 
 def _interleave(a, b):
