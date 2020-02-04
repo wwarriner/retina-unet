@@ -51,6 +51,10 @@
   "testing": {
     "best_or_last": "best",
     "patch_averaging": true,
-    "patch_stride": [5, 5]
+    "consensus": {
+      "enable": true,
+      "patch_stride": [5, 5],
+      "threshold": 0.5
+    }
   }
 }

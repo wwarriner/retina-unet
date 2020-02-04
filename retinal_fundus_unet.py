@@ -1,4 +1,4 @@
-from itertools import repeat
+from itertools import repeat, product
 from pathlib import Path, PurePath
 
 import numpy as np
@@ -12,6 +12,7 @@ from tensorflow.python.keras.models import model_from_json
 from tensorflow.python.keras.utils import to_categorical
 
 from lib.config_snake.config import ConfigFile
+from lib.python_image_utilities.file_utils import Files
 from lib.python_image_utilities.image_util import *
 from lib.python_image_utilities.patch_extract import *
 from unet import WeightedCategoricalCrossentropy, Unet
@@ -137,9 +138,14 @@ def get_train_test_subfolder(config, train_test, sub_tag):
     return PurePath(".") / paths.data / paths[train_test] / paths[sub_tag]
 
 
+def load_images_from_folder(*args, **kwargs):
+    x, _ = load_images(*args, **kwargs)
+    return x
+
+
 def load_mask(config, test_train):
     mask_folder = get_train_test_subfolder(config, test_train, "masks")
-    mask = load_images(str(mask_folder), ".gif")
+    mask = load_images_from_folder(str(mask_folder), ".gif")
     mask = stack(mask)
     return mask / 255
 
@@ -159,13 +165,13 @@ def load_model_from_best_weights(config):
 
 def load_xy(config, test_train):
     x_folder = get_train_test_subfolder(config, test_train, "images")
-    x = load_images(str(x_folder), ".tif")
+    x = load_images_from_folder(str(x_folder), ".tif")
     x = stack(x)
     x = preprocess(x)
     assert (x != 0).any()
 
     y_folder = get_train_test_subfolder(config, test_train, "groundtruth")
-    y = load_images(str(y_folder), ".gif")
+    y = load_images_from_folder(str(y_folder), ".gif")
     y = stack(y)
     y = y / 255
     assert (y == 1).any()
@@ -213,9 +219,26 @@ def save_last_weights(config, model):
 
 
 def save_predictions(config, predictions):
-    name = PurePath(str(get_name(config)) + "_prediction.png")
+    name = get_name(config)
     out_folder = get_out_folder(config)
-    save_images(out_folder, name, predictions)
+    out_files = Files(out_folder, name, ext=".png") + "prediction"
+    indices = list(range(len(predictions)))
+    save_images(out_files.generate_file_names(indices=indices), predictions)
+
+
+def generate_offsets(patch_stride, patch_shape):
+    ranges = [
+        list(range(0, shape, stride))
+        for shape, stride in zip(patch_shape, patch_stride)
+    ]
+    return product(*ranges)
+
+
+def predict(model, patches):
+    predictions = model.predict(patches)
+    predictions = predictions[..., 1] > 0.5
+    predictions = predictions[..., np.newaxis]
+    return predictions.astype(np.uint8)
 
 
 def test(config=None):
@@ -225,11 +248,34 @@ def test(config=None):
     TEST = "test"
     x_test, y_test = load_xy(config, TEST)
     mask = load_mask(config, TEST)
-    x_test, patch_count, padding = extract_structured_patches(config, x_test)
+    # x_test, patch_count, padding = extract_structured_patches(config, x_test)
 
     model = load_model_from_best_weights(config)
 
-    predictions = generate_predictions(model, x_test, mask, patch_count, padding)
+    use_consensus = config.testing.consensus.enable
+    patch_shape = config.training.unet.input_shape[0:-1]
+    threshold = config.testing.consensus.threshold
+    predictions = []
+    for image in x_test:
+        # generate patches
+        if use_consensus:
+            patch_stride = config.testing.consensus.patch_stride
+            offsets = generate_offsets(patch_stride, patch_shape)
+            batch = []
+            for offset in offsets:
+                patches, counts, padding = patchify(image, patch_shape, offset=offset)
+                patches = predict(model, patches)
+                batch.append(unpatchify(patches, counts, padding))
+            batch = np.concatenate(batch, axis=0)
+            prediction = consensus(batch, threshold=threshold)
+        else:
+            patches, counts, padding = patchify(image, patch_shape)
+            patches = predict(model, patches)
+            prediction = unpatchify(patches, counts, padding)
+        predictions.append(prediction)
+    predictions = np.stack(predictions, axis=0)
+    predictions = rescale(predictions, out_range=(0, 255))
+    # predictions = generate_predictions(model, x_test, mask, patch_count, padding)
     save_predictions(config, predictions)
 
 
@@ -262,11 +308,13 @@ def display_predictions(view_fn, config=None, color=[1.0, 1.0, 0.0]):
     if config is None:
         config = ConfigFile("config.json")
 
-    predicted_images = stack(load_images(get_out_folder(config), ".png"))
+    predicted_images = stack(load_images_from_folder(get_out_folder(config), ".png"))
     # predicted_images = np.stack([rgb2gray(image) for image in predicted_images])
     # predicted_images = predicted_images[..., np.newaxis]
     ground_truth_images = stack(
-        load_images(get_train_test_subfolder(config, "test", "groundtruth"), ".gif")
+        load_images_from_folder(
+            get_train_test_subfolder(config, "test", "groundtruth"), ".gif"
+        )
     )
     overlay_montage = overlay(
         montage(predicted_images), montage(ground_truth_images), color, 0.5, 0.5
@@ -275,5 +323,5 @@ def display_predictions(view_fn, config=None, color=[1.0, 1.0, 0.0]):
 
 
 if __name__ == "__main__":
-    train()
-    #display_predictions(show)
+    test()
+    # display_predictions(show)
