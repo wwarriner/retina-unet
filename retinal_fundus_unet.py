@@ -246,9 +246,8 @@ def test(config=None):
         config = ConfigFile("config.json")
 
     TEST = "test"
-    x_test, y_test = load_xy(config, TEST)
-    mask = load_mask(config, TEST)
-    # x_test, patch_count, padding = extract_structured_patches(config, x_test)
+    x_test, _ = load_xy(config, TEST)
+    masks = load_mask(config, TEST)
 
     model = load_model_from_best_weights(config)
 
@@ -257,7 +256,6 @@ def test(config=None):
     threshold = config.testing.consensus.threshold
     predictions = []
     for image in x_test:
-        # generate patches
         if use_consensus:
             patch_stride = config.testing.consensus.patch_stride
             offsets = generate_offsets(patch_stride, patch_shape)
@@ -274,8 +272,8 @@ def test(config=None):
             prediction = unpatchify(patches, counts, padding)
         predictions.append(prediction)
     predictions = np.stack(predictions, axis=0)
+    predictions = mask_images(predictions, masks)
     predictions = rescale(predictions, out_range=(0, 255))
-    # predictions = generate_predictions(model, x_test, mask, patch_count, padding)
     save_predictions(config, predictions)
 
 
