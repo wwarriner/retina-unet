@@ -3,6 +3,7 @@ from pathlib import Path, PurePath
 
 import numpy as np
 from tensorflow import config as tf_config
+from tensorflow import convert_to_tensor
 
 devices = tf_config.experimental.list_physical_devices("GPU")
 assert len(devices) > 0
@@ -10,6 +11,7 @@ tf_config.experimental.set_memory_growth(devices[0], True)
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 from tensorflow.python.keras.models import model_from_json
 from tensorflow.python.keras.utils import to_categorical
+from tensorflow.python.keras.metrics import MeanIoU
 
 from lib.config_snake.config import ConfigFile
 from lib.python_image_utilities.file_utils import Files
@@ -173,9 +175,10 @@ def load_xy(config, test_train):
     y_folder = get_train_test_subfolder(config, test_train, "groundtruth")
     y = load_images_from_folder(str(y_folder), ".gif")
     y = stack(y)
-    y = y / 255
+    y = rescale(y, out_range=(0, 1))
     assert (y == 1).any()
     assert (y == 0).any()
+    assert not (np.abs(y) > 1).any()
 
     return x, y
 
@@ -241,12 +244,24 @@ def predict(model, patches):
     return predictions.astype(np.uint8)
 
 
+def evaluate(model, predictions, ground_truth):
+    assert np.issubdtype(predictions.dtype, np.integer)
+    assert np.issubdtype(ground_truth.dtype, np.integer)
+    m = MeanIoU(num_classes=2)
+    results = []
+    for p, g in zip(predictions, ground_truth):
+        m.update_state(g, p, convert_to_tensor(g))
+        results.append(m.result())
+        m.reset_states()
+    return results
+
+
 def test(config=None):
     if config is None:
         config = ConfigFile("config.json")
 
     TEST = "test"
-    x_test, _ = load_xy(config, TEST)
+    x_test, y_test = load_xy(config, TEST)
     masks = load_mask(config, TEST)
 
     model = load_model_from_best_weights(config)
@@ -273,8 +288,10 @@ def test(config=None):
         predictions.append(prediction)
     predictions = np.stack(predictions, axis=0)
     predictions = mask_images(predictions, masks)
+    iou = evaluate(model, predictions, y_test)
     predictions = rescale(predictions, out_range=(0, 255))
     save_predictions(config, predictions)
+    return iou
 
 
 def train(config=None):
@@ -321,5 +338,5 @@ def display_predictions(view_fn, config=None, color=[1.0, 1.0, 0.0]):
 
 
 if __name__ == "__main__":
-    test()
+    print(test())
     # display_predictions(show)
